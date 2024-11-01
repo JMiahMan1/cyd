@@ -1,7 +1,7 @@
 substitutions:
   name: jarvis-cyd
   friendly_name: cyd-jarvis
-  api_key: "8HRKxpjzuLa3DTYrMbtt0/CEn6Qt/ctZUSvMVX0Sg3E="
+  api_key: !secret api_key
 
 #Sensors
   # Weather
