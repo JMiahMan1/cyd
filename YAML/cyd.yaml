@@ -743,49 +743,49 @@ binary_sensor:
                   text_color: white
 
 font:
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.otf"
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.ttf"
     id: my_font16
     size: 16
     bpp: 4
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Regular.otf"
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Regular.ttf"
     id: my_font28
     size: 28
     bpp: 4
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.otf"
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.ttf"
     id: my_font40
     size: 40
     bpp: 4
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.otf"
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.ttf"
     id: my_font18
     size: 18
     bpp: 4
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.otf"
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.ttf"
     id: my_font22
     size: 22
     bpp: 4
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.otf"
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.ttf"
     id: temp_font30
     size: 30
     bpp: 4
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Regular.otf"
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Regular.ttf"
     id: weather_font30
     size: 30
     bpp: 4
@@ -798,7 +798,7 @@ font:
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Regular.otf"
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Regular.ttf"
     id: my_font60
     size: 60
     glyphs:
