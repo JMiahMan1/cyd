@@ -41,9 +41,6 @@ substitutions:
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
-  platformio_options:
-    # build_unflags: -Werror=all
-    board_build.flash_mode: dio
   on_boot:
     script.execute: backlight_off
 
@@ -51,12 +48,14 @@ esp32:
   board: esp32dev
   framework:
     type: esp-idf
+  flash_size: 4MB
+
 api:
   encryption:
     key: ${api_key}
 
-logger:
-  level: DEBUG
+#logger:
+  #level: DEBUG
 
 wifi:
   ssid: !secret wifi_ssid
@@ -116,7 +115,7 @@ display:
     dc_pin: GPIO2
     rotation: 90
     invert_colors: false
-    auto_clear_enabled: true
+    auto_clear_enabled: False
     id: device_display
 
 # Setup a pin to control the backlight
@@ -195,32 +194,6 @@ text_sensor:
                 text_color: blue
             - lvgl.label.update:
                 id: set_temp_label
-                text: "Thermostat\nOff Schedule"
-
-  - platform: homeassistant
-    id: set_temp2_mode
-    entity_id: ${us_set_climate_entity}
-    internal: true
-    attribute: preset_mode
-    filters:
-      - lambda: return x;
-    on_value:
-      - if:
-          condition:
-            - lambda: return x == "NoHold";
-          then:
-            - lvgl.label.update:
-                id: set_temp2_lvgl
-                text_color: white
-            - lvgl.label.update:
-                id: set_temp2_label
-                text: "Thermostat\nOn Schedule"
-          else:
-            - lvgl.label.update:
-                id: set_temp2_lvgl
-                text_color: blue
-            - lvgl.label.update:
-                id: set_temp2_label
                 text: "Thermostat\nOff Schedule"
 
   - platform: homeassistant
@@ -496,20 +469,6 @@ sensor:
             args: [ 'x' ]
 
   - platform: homeassistant
-    id: in_temp2
-    entity_id: ${us_climate_entity}
-    internal: true
-    filters:
-      - lambda: return x;
-    unit_of_measurement: "°F"
-    on_value:
-      - lvgl.label.update:
-          id: us_climate_actual_temp_lvgl
-          text:
-            format: "%.0f°F"
-            args: [ 'x' ]
-
-  - platform: homeassistant
     id: set_temp
     entity_id: ${ds_set_climate_entity}
     attribute: temperature
@@ -528,28 +487,6 @@ sensor:
           else:
             - lvgl.label.update:
                 id: set_temp_lvgl
-                text:
-                  format: "%.0f°F"
-                  args: [ 'x' ]
-  - platform: homeassistant
-    id: set_temp2
-    entity_id: ${us_set_climate_entity}
-    attribute: temperature
-    internal: true
-    filters:
-      - lambda: return x;
-    unit_of_measurement: "°F"
-    on_value:
-      - if:
-          condition:
-            - lambda: return isnan(x);
-          then:
-            - lvgl.label.update:
-                id: set_temp2_lvgl
-                text: "Off"
-          else:
-            - lvgl.label.update:
-                id: set_temp2_lvgl
                 text:
                   format: "%.0f°F"
                   args: [ 'x' ]
@@ -798,11 +735,11 @@ font:
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Regular.ttf"
-    id: my_font60
-    size: 60
-    glyphs:
-      '${font_glyphs}'
+#  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Regular.ttf"
+#    id: my_font60
+#    size: 60
+#    glyphs:
+#      '${font_glyphs}'
 
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
     id: icon_font_120
@@ -847,27 +784,27 @@ font:
       - "\U000F1322"#tools
       - "\U000F12D4"#garage open
       - "\U000F12D3"#garage closed
-      - "\U000F0238"#heating
+#      - "\U000F0238"#heating
       - "\U000F0B2C"#up
       - "\U000F0B26"#down
-      - "\U000F024A"#garden
-      - "\U000F1987"#floods
-      - "\U000F04C8"#spots
-      - "\U000F1722"#fire off
-      - "\U000F068A"#alarm home
-      - "\U000F099D"#alarm away
-      - "\U000F1828"#alarm night
-      - "\U000F099E"#disarmed
-      - "\U000F0565"#arming
+#      - "\U000F024A"#garden
+#      - "\U000F1987"#floods
+#      - "\U000F04C8"#spots
+#      - "\U000F1722"#fire off
+#      - "\U000F068A"#alarm home
+#      - "\U000F099D"#alarm away
+#      - "\U000F1828"#alarm night
+#      - "\U000F099E"#disarmed
+#      - "\U000F0565"#arming
       - "\U000F1A12"#home button
       - "\U000F0D90"#monitor_off
       - "\U000F0B28"#left
       - "\U000F192D"#electricity
       - "\U000F1A1B"#gas
-      - "\U000F0B6C"#car battery
-      - "\U000F0873"#car miles non
-      - "\U000F0875"#car miles low
-      - "\U000F0874"#car miles full
+#      - "\U000F0B6C"#car battery
+#      - "\U000F0873"#car miles non
+#      - "\U000F0875"#car miles low
+#      - "\U000F0874"#car miles full
       - "\U000F0B2A"#right
       - "\U000F04B9"#living room
       - "\U000F1061"#dining
@@ -878,7 +815,7 @@ font:
       - "\U000F1160"#kitchen
       - "\U000F0210"#fan
       - "\U000F050F"#temp
-      - "\U000F01AE"#gbp pound symbol
+#      - "\U000F01AE"#gbp pound symbol
       - "\U000F1747"#tall lamp
       - "\U000F0769"#ceiling
       - "\U000F18DD"#ceiling multiple
@@ -1521,279 +1458,6 @@ lvgl:
                   text_font: my_font18
                   text_color: bg_purple
                   text: " "
-
-    - id: second_page
-      widgets:
-        - obj:
-            styles: main_content
-            layout:
-              pad_column: 15
-              pad_row: 10
-              type: GRID
-              grid_columns: [FR(1), FR(1), FR(1), FR(1)]
-              grid_rows: [FR(30), FR(5), FR(30), FR(5)]
-
-            widgets:
-              - button:
-                  checkable: true
-                  id: button2_1
-                  grid_cell_column_pos: 0
-                  grid_cell_row_pos: 0
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  widgets:
-                    - label:
-                        id: mb_light_lvgl
-                        text_font: icon_font_80
-                        text: "\U000F06B5"
-                  on_click:
-                    - homeassistant.action:
-                        action: light.toggle
-                        data:
-                          entity_id: ${masterbed_lamp_left}
-              - label:
-                  grid_cell_column_pos: 0 # place the widget in
-                  grid_cell_row_pos: 1 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-              - button:
-                  checkable: true
-                  id: button2_2
-                  grid_cell_column_pos: 1
-                  grid_cell_row_pos: 0
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  widgets:
-                    - label:
-                        id: kitchen_light_lvgl
-                        text_font: icon_font_80
-                        text: "\U000F06B5"
-                  on_click:
-                    - homeassistant.action:
-                        action: light.toggle
-                        data:
-                          entity_id: ${masterbed_lamp_right}
-
-
-              - label:
-                  grid_cell_column_pos: 1 # place the widget in
-                  grid_cell_row_pos: 1 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-              - button:
-                  checkable: true
-                  id: button2_3
-                  grid_cell_column_pos: 2
-                  grid_cell_row_pos: 0
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  widgets:
-                    - label:
-                        id: spare_1_lvgl
-                        text_font: icon_font_80
-                        text: "\U000F0769"
-
-              - label:
-                  grid_cell_column_pos: 2 # place the widget in
-                  grid_cell_row_pos: 1 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-              - button:
-                  checkable: true
-                  id: button2_4
-                  grid_cell_column_pos: 3
-                  grid_cell_row_pos: 0
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  widgets:
-                    - label:
-                        id: spare_2_lvgl
-                        text_font: icon_font_80
-                        text: "\U000F18DD"
-              - label:
-                  grid_cell_column_pos: 3 # place the widget in
-                  grid_cell_row_pos: 1 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-
-
-## second row ##
-              - button:
-                  checkable: false
-                  id: button2_7
-                  grid_cell_column_pos: 0
-                  grid_cell_row_pos: 2
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  pressed:
-                    bg_color: blue
-                  widgets:
-                    - label:
-                        id: climate2_down_lvgl
-                        text_font: icon_font_80
-                        text: "\U000F0B26"
-                  on_press:
-                    then:
-                      - homeassistant.service:
-                          service: climate.set_temperature
-                          data:
-                            temperature: !lambda "return id(set_temp2).state - 1;"
-                            entity_id: ${us_set_climate_entity}
-
-              - label:
-                  grid_cell_column_pos: 0 # place the widget in
-                  grid_cell_row_pos: 3 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-              - button:
-                  checkable: false
-                  id: button2_8
-                  grid_cell_column_pos: 1
-                  grid_cell_row_pos: 2
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  pressed:
-                    bg_color: red
-                  widgets:
-                    - label:
-                        id: set_temp2_lvgl
-                        translate_y: 15
-                        text_font: my_font40
-                        text: " "
-                    - label:
-                        id: set_temp2_label
-                        text_align: CENTER
-                        translate_y: 55
-                        text_font: my_font16
-                        text: "Thermostat"
-                  on_press:
-                    - if:
-                        condition:
-                          - lambda: return id(set_temp2_mode).state == "NoHold";
-                        then:
-                          - lvgl.label.update:
-                              id: set_temp2_lvgl
-                              text_color: white
-                          - lvgl.label.update:
-                             id: set_temp2_label
-                             text: "Thermostat\nOn Schedule"
-                        else:
-                          - homeassistant.action:
-                              action: climate.set_preset_mode
-                              data:
-                                preset_mode: "NoHold"
-                                entity_id: ${us_set_climate_entity}
-                          - lvgl.label.update:
-                              id: set_temp2_lvgl
-                              text_color: white
-                          - lvgl.label.update:
-                             id: set_temp2_label
-                             text: "Thermostat\nOn Schedule"
-
-              - label:
-                  grid_cell_column_pos: 1 # place the widget in
-                  grid_cell_row_pos: 3 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-              - button:
-                  checkable: false
-                  id: button2_9
-                  grid_cell_column_pos: 2
-                  grid_cell_row_pos: 2
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  widgets:
-                    - label:
-                        id: us_climate_actual_temp_lvgl
-                        translate_y: 15
-                        text_font: my_font40
-                        text: " "
-                    - label:
-                        id: us_climate_actual_temp_label
-                        text_align: CENTER
-                        translate_y: 55
-                        text_font: my_font18
-                        text: "Actual"
-
-              - label:
-                  grid_cell_column_pos: 2 # place the widget in
-                  grid_cell_row_pos: 3 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-              - button:
-                  checkable: false
-                  id: button2_10
-                  grid_cell_column_pos: 3
-                  grid_cell_row_pos: 2
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  pressed:
-                    bg_color: red
-                  widgets:
-                    - label:
-                        id: climate2_up_lvgl
-                        text_font: icon_font_80
-                        text: "\U000F0B2C"
-                  on_press:
-                    then:
-                      - homeassistant.service:
-                          service: climate.set_temperature
-                          data:
-                            temperature: !lambda "return id(set_temp2).state + 1;"
-                            entity_id: ${us_set_climate_entity}
-
-              - button:
-                  checkable: false
-                  border_width: 0
-                  bg_color: lilac
-                  shadow_spread: 0
-                  shadow_width: 0
-                  grid_cell_column_pos: 0 # place the widget in
-                  grid_cell_row_pos: 3 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  widgets:
-                    - label:
-                        id: back_label
-                        translate_y: -8
-                        text_font: my_font16
-                        text_color: bg_purple
-                        text: "<- Back"
-                        text_align: CENTER
-                  on_press:
-                    then:
-                      - lvgl.page.previous:
-
-              - label:
-                  grid_cell_column_pos: 3 # place the widget in
-                  grid_cell_row_pos: 3 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-
 
         - obj:
             styles: bottom_content_left
