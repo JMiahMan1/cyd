@@ -41,6 +41,8 @@ substitutions:
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
+  platformio_options:
+    board_build.partitions: "/home/jeremiah/Desktop/ESP-Devices/CYD/YAML/part.csv"
   on_boot:
     script.execute: backlight_off
 
@@ -54,8 +56,8 @@ api:
   encryption:
     key: ${api_key}
 
-#logger:
-  #level: DEBUG
+logger:
+  level: DEBUG
 
 wifi:
   ssid: !secret wifi_ssid
@@ -102,6 +104,10 @@ touchscreen:
     x_max: 280
     y_min: 340
     y_max: 3860
+  transform:
+    mirror_x: true
+    mirror_y: true
+    swap_xy: true
   on_touch:
     then:
       - script.execute: backlight_off
@@ -109,14 +115,17 @@ touchscreen:
           ESP_LOGI("Touch", "Touch detected at x=%d, y=%d", touch.x, touch.y);
 display:
   - platform: ili9xxx
-    model: ili9341
+    id: device_display
+    model: ILI9342
+    dimensions:
+      width: 320
+      height: 240
     spi_id: tft
     cs_pin: GPIO15
     dc_pin: GPIO2
-    rotation: 90
+    rotation: 0
     invert_colors: false
     auto_clear_enabled: False
-    id: device_display
 
 # Setup a pin to control the backlight
 output:
@@ -187,14 +196,14 @@ text_sensor:
                 text_color: white
             - lvgl.label.update:
                 id: set_temp_label
-                text: "Thermostat\nOn Schedule"
+                text: "Schedule"
           else:
             - lvgl.label.update:
                 id: set_temp_lvgl
                 text_color: blue
             - lvgl.label.update:
                 id: set_temp_label
-                text: "Thermostat\nOff Schedule"
+                text: "Manual"
 
   - platform: homeassistant
     id: garage
@@ -264,7 +273,7 @@ script:
           then:
             - lvgl.label.update:
                 id: display_weather
-                text_font: icon_font_120
+                text_font: icon_font_60
                 text: "\U000F0597"
           else:
             - if:
@@ -273,7 +282,7 @@ script:
                 then:
                   - lvgl.label.update:
                       id: display_weather
-                      text_font: icon_font_120
+                      text_font: icon_font_60
                       text: "\U000F0594"
                 else:
                   - if:
@@ -282,7 +291,7 @@ script:
                       then:
                         - lvgl.label.update:
                             id: display_weather
-                            text_font: icon_font_120
+                            text_font: icon_font_60
                             text: "\U000F0590"
                       else:
                         - if:
@@ -291,7 +300,7 @@ script:
                             then:
                               - lvgl.label.update:
                                   id: display_weather
-                                  text_font: icon_font_120
+                                  text_font: icon_font_60
                                   text: "\U000F0592"
                             else:
                               - if:
@@ -300,7 +309,7 @@ script:
                                   then:
                                     - lvgl.label.update:
                                         id: display_weather
-                                        text_font: icon_font_120
+                                        text_font: icon_font_60
                                         text: "\U000F0593"
                                   else:
                                     - if:
@@ -309,7 +318,7 @@ script:
                                         then:
                                           - lvgl.label.update:
                                               id: display_weather
-                                              text_font: icon_font_120
+                                              text_font: icon_font_60
                                               text: "\U000F067E"
                                         else:
                                           - if:
@@ -318,7 +327,7 @@ script:
                                               then:
                                                 - lvgl.label.update:
                                                     id: display_weather
-                                                    text_font: icon_font_120
+                                                    text_font: icon_font_60
                                                     text: "\U000F0595"
                                               else:
                                                 - if:
@@ -327,7 +336,7 @@ script:
                                                     then:
                                                       - lvgl.label.update:
                                                           id: display_weather
-                                                          text_font: icon_font_120
+                                                          text_font: icon_font_60
                                                           text: "\U000F0596"
                                                     else:
                                                       - if:
@@ -336,7 +345,7 @@ script:
                                                           then:
                                                             - lvgl.label.update:
                                                                 id: display_weather
-                                                                text_font: icon_font_120
+                                                                text_font: icon_font_60
                                                                 text: "\U000F0598"
                                                           else:
                                                             - if:
@@ -345,7 +354,7 @@ script:
                                                                 then:
                                                                   - lvgl.label.update:
                                                                       id: display_weather
-                                                                      text_font: icon_font_120
+                                                                      text_font: icon_font_60
                                                                       text: "\U000F067F"
                                                                 else:
                                                                   - if:
@@ -354,7 +363,7 @@ script:
                                                                       then:
                                                                         - lvgl.label.update:
                                                                             id: display_weather
-                                                                            text_font: icon_font_120
+                                                                            text_font: icon_font_60
                                                                             text: "\U000F0599"
                                                                       else:
                                                                         - if:
@@ -363,7 +372,7 @@ script:
                                                                             then:
                                                                               - lvgl.label.update:
                                                                                   id: display_weather
-                                                                                  text_font: icon_font_120
+                                                                                  text_font: icon_font_60
                                                                                   text: "\U000F0596"
                                                                             else:
                                                                               - if:
@@ -372,7 +381,7 @@ script:
                                                                                   then:
                                                                                     - lvgl.label.update:
                                                                                         id: display_weather
-                                                                                        text_font: icon_font_120
+                                                                                        text_font: icon_font_60
                                                                                         text: "\U000F059D"
                                                                                   else:
                                                                                     - if:
@@ -381,7 +390,7 @@ script:
                                                                                         then:
                                                                                           - lvgl.label.update:
                                                                                               id: display_weather
-                                                                                              text_font: icon_font_120
+                                                                                              text_font: icon_font_60
                                                                                               text: "\U000F059E"
                                                                                         else:
                                                                                           - if:
@@ -390,7 +399,7 @@ script:
                                                                                               then:
                                                                                                 - lvgl.label.update:
                                                                                                     id: display_weather
-                                                                                                    text_font: icon_font_120
+                                                                                                    text_font: icon_font_60
                                                                                                     text: "\U000F0F37"
                                                                                               else:
                                                                                                 - if:
@@ -399,7 +408,7 @@ script:
                                                                                                     then:
                                                                                                       - lvgl.label.update:
                                                                                                           id: display_weather
-                                                                                                          text_font: icon_font_120
+                                                                                                          text_font: icon_font_60
                                                                                                           text: "\U000F0590"
 
   - id: time_update
@@ -680,70 +689,64 @@ binary_sensor:
                   text_color: white
 
 font:
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.ttf"
-    id: my_font16
-    size: 16
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
+    id: my_font8
+    size: 8
     bpp: 4
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Regular.ttf"
-    id: my_font28
-    size: 28
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
+    id: my_font12
+    size: 12
     bpp: 4
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.ttf"
-    id: my_font40
-    size: 40
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
+    id: my_font14
+    size: 14
     bpp: 4
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.ttf"
-    id: my_font18
-    size: 18
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
+    id: my_font10
+    size: 10
     bpp: 4
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.ttf"
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
     id: my_font22
     size: 22
     bpp: 4
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Bold.ttf"
-    id: temp_font30
-    size: 30
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
+    id: temp_font14
+    size: 14
     bpp: 4
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Regular.ttf"
-    id: weather_font30
-    size: 30
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
+    id: weather_font12
+    size: 12
     bpp: 4
     glyphs:
       '${font_glyphs}'
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/clocker/Clocker-Bold.ttf"
-    id: clock_font56
-    size: 56
+  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
+    id: clock_font16
+    size: 16
     glyphs:
       '${font_glyphs}'
-
-#  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-Regular.ttf"
-#    id: my_font60
-#    size: 60
-#    glyphs:
-#      '${font_glyphs}'
 
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
-    id: icon_font_120
-    size: 120
+    id: icon_font_60
+    size: 60
     bpp: 4
     glyphs: &icon_glyphs
       - "\U000F0590" # mdi-weather-cloudy
@@ -776,81 +779,67 @@ font:
       - "\U000F0F38" # mdi-weather-tornado
       - "\U000F059D" # mdi-weather-windy
       - "\U000F059E" # mdi-weather-windy-variant
-      - "\U000F0A19"#toggle off
-      - "\U000F0521"#toggle on
-      - "\U000F0150"#clock
-      - "\U000F057E"#speaker on
-      - "\U000F0581"#speaker off
-      - "\U000F1322"#tools
-      - "\U000F12D4"#garage open
-      - "\U000F12D3"#garage closed
-#      - "\U000F0238"#heating
-      - "\U000F0B2C"#up
-      - "\U000F0B26"#down
-#      - "\U000F024A"#garden
-#      - "\U000F1987"#floods
-#      - "\U000F04C8"#spots
-#      - "\U000F1722"#fire off
-#      - "\U000F068A"#alarm home
-#      - "\U000F099D"#alarm away
-#      - "\U000F1828"#alarm night
-#      - "\U000F099E"#disarmed
-#      - "\U000F0565"#arming
-      - "\U000F1A12"#home button
-      - "\U000F0D90"#monitor_off
-      - "\U000F0B28"#left
-      - "\U000F192D"#electricity
-      - "\U000F1A1B"#gas
-#      - "\U000F0B6C"#car battery
-#      - "\U000F0873"#car miles non
-#      - "\U000F0875"#car miles low
-#      - "\U000F0874"#car miles full
-      - "\U000F0B2A"#right
-      - "\U000F04B9"#living room
-      - "\U000F1061"#dining
-      - "\U000F06B5"#lamp
-      - "\U000F06E8"#light bulb illuminated
-      - "\U000F0335"#light bulb off
-      - "\U000F07F4"#tv
-      - "\U000F1160"#kitchen
-      - "\U000F0210"#fan
-      - "\U000F050F"#temp
-#      - "\U000F01AE"#gbp pound symbol
-      - "\U000F1747"#tall lamp
-      - "\U000F0769"#ceiling
-      - "\U000F18DD"#ceiling multiple
-      - "\U000F091C"#wall light
-      - "\U000F075A"#music
-      - "\U000F05CB"#voice
-      - "\U000F0ED4"#voice off
-      - "\U000F0FCE"#scene
-      - "\U000F040A"#play
-      - "\U000F03E4"#pause
-      - "\U000F04DB"#stop
-      - "\U000F04AD"#next track
-      - "\U000F04AE"#previous track
-      - "\U000F075E"#vol minus
-      - "\U000F075D"#vol plus
-      - "\U000F040E"#play/pause
-      - "\U000F08D6"#settings
-      - "\U000F036D"#microphone off
-      - "\U000F032A"#energy leaf
-
-  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
-    id: icon_font_80
-    size: 80
-    bpp: 4
-    glyphs: *icon_glyphs
-
-  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
-    id: icon_font_60
-    size: 60
-    bpp: 4
-    glyphs: *icon_glyphs
+      - "\U000F0A19" #toggle off
+      - "\U000F0521" #toggle on
+      - "\U000F0150" #clock
+      - "\U000F057E" #speaker on
+      - "\U000F0581" #speaker off
+      - "\U000F1322" #tools
+      - "\U000F12D4" #garage open
+      - "\U000F12D3" #garage closed
+#      - "\U000F0238" #heating
+      - "\U000F0B2C" #up
+      - "\U000F0B26" #down
+      - "\U000F1A12" #home button
+      - "\U000F0D90" #monitor_off
+      - "\U000F0B28" #left
+      - "\U000F192D" #electricity
+      - "\U000F1A1B" #gas
+      - "\U000F0B2A" #right
+      - "\U000F04B9" #living room
+      - "\U000F1061" #dining
+      - "\U000F06B5" #lamp
+      - "\U000F06E8" #light bulb illuminated
+      - "\U000F0335" #light bulb off
+      - "\U000F07F4" #tv
+      - "\U000F1160" #kitchen
+      - "\U000F0210" #fan
+      - "\U000F050F" #temp
+      - "\U000F1747" #tall lamp
+      - "\U000F0769" #ceiling
+      - "\U000F18DD" #ceiling multiple
+      - "\U000F091C" #wall light
+      - "\U000F075A" #music
+      - "\U000F05CB" #voice
+      - "\U000F0ED4" #voice off
+      - "\U000F0FCE" #scene
+      - "\U000F040A" #play
+      - "\U000F03E4" #pause
+      - "\U000F04DB" #stop
+      - "\U000F04AD" #next track
+      - "\U000F04AE" #previous track
+      - "\U000F075E" #vol minus
+      - "\U000F075D" #vol plus
+      - "\U000F040E" #play/pause
+      - "\U000F08D6" #settings
+      - "\U000F036D" #microphone off
+      - "\U000F032A" #energy leaf
 
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
     id: icon_font_30
     size: 30
+    bpp: 4
+    glyphs: *icon_glyphs
+
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
+    id: icon_font_20
+    size: 20
+    bpp: 4
+    glyphs: *icon_glyphs
+
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
+    id: icon_font_14
+    size: 14
     bpp: 4
     glyphs: *icon_glyphs
 
@@ -900,13 +889,14 @@ color:
   - id: bg_grey
     hex: '4F4F4F'
 lvgl:
+  buffer_size: 25%
   displays:
     - device_display
   touchscreens:
     - device_touchscreen
   theme:
     label:
-      text_font: my_font28 # set all your labels to use your custom defined font
+      text_font: my_font12 # set all your labels to use your custom defined font
       text_align: CENTER
       text_color: 0xffffff
       align: TOP_MID
@@ -915,27 +905,27 @@ lvgl:
       bg_color: bg_purple
       bg_opa: COVER
       border_color: 0x53334B
-      border_width: 4
+      border_width: 1
       text_color: white
-      radius: 20
+      radius: 10
       shadow_color: 0x063D71
       shadow_ofs_x: 0
       shadow_ofs_y: 0
-      shadow_spread: 3
-      shadow_width: 5
+      shadow_spread: 2
+      shadow_width: 3
       shadow_opa: 70%
       checked:
         bg_color: 0x6A4260
         bg_opa: COVER
         border_color: black
-        border_width: 2
+        border_width: 1
         text_color: yellow
-        radius: 20
+        radius: 10
         shadow_color: yellow
         shadow_ofs_x: 0
         shadow_ofs_y: 0
-        shadow_spread: 5
-        shadow_width: 5
+        shadow_spread: 2
+        shadow_width: 3
         shadow_opa: 70%
 
     switch:
@@ -989,9 +979,9 @@ lvgl:
       align: BOTTOM_LEFT
       width: 34%
       height: 30%
-      translate_x: 256
+      translate_x: 0
       border_side: TOP
-      border_width: 6
+      border_width: 2
       border_color: 0x53334B
       radius: 0
 
@@ -1002,9 +992,9 @@ lvgl:
       align: BOTTOM_LEFT
       width: 34%
       height: 30%
-      translate_x: 528
+      translate_x: 0
       border_side: TOP
-      border_width: 6
+      border_width: 2
       border_color: 0x53334B
       radius: 0
 
@@ -1026,85 +1016,86 @@ lvgl:
             widgets:
               - label:
                   id: display_time
-                  text_font: clock_font56
+                  text_font: clock_font16
                   text: "23:59"
               - label:
                   id: display_day
-                  text_font: weather_font30
+                  text_font: weather_font12
                   text: "Sunday"
-                  translate_y: 70
+                  translate_y: 20
               - label:
                   id: display_date
-                  text_font: weather_font30
+                  text_font: weather_font12
                   text: "01 June"
-                  translate_y: 100
+                  translate_y: 30
 
               - label:
+
                   id: display_weather
-                  translate_y: 130
-                  text_font: icon_font_80
+                  translate_y: 50
+                  text_font: icon_font_30
                   text: "\U000F0590"
 
               - label:
                   id: display_weather_label
                   text: " "
-                  translate_y: 220
+                  translate_y: 60
 
               - label:
                   id: display_out_temp
-                  text_font: temp_font30
+                  text_font: temp_font14
                   text: " "
-                  translate_y: 260
-                  translate_x: 10
+                  translate_y: 120
+                  translate_x: 5
 
               - label:
                   id: display_out_temp_icon
-                  text_font: icon_font_30
-                  text: "\U000F024A"
-                  translate_y: 260
-                  translate_x: -90
+                  text_font: icon_font_14
+                  text: "\U000F050F"
+                  translate_y: 120
+                  translate_x: -40
 
               - label:
                   id: real_feel_temp_lvgl
-                  text_font: temp_font30
+                  text_font: temp_font14
                   text: " "
-                  translate_y: 295
-                  translate_x: 10
+                  translate_y: 140
+                  translate_x: 5
 
               - label:
                   id: display_real_feel_temp_icon
-                  text_font: icon_font_30
+                  text_font: icon_font_14
                   text: "\U000F050F"
-                  translate_y: 295
-                  translate_x: -90
+                  translate_y: 140
+                  translate_x: -40
 
               - label:
                   id: display_out_high_temp
-                  text_font: temp_font30
+                  text_font: temp_font14
                   text: " "
-                  translate_y: 330
-                  translate_x: 10
+                  translate_y: 160
+                  translate_x: 5
 
               - label:
                   id: display_out_high_temp_icon
-                  text_font: icon_font_30
+                  text_font: icon_font_14
                   text: "\U000F050F"
-                  translate_y: 330
-                  translate_x: -90
+                  translate_y: 160
+                  translate_x: -40
 
               - label:
                   id: display_out_low_temp
-                  text_font: temp_font30
+                  text_font: temp_font14
                   text: " "
-                  translate_y: 365
-                  translate_x: 10
+                  translate_y: 180
+                  translate_x: 5
 
               - label:
                   id: display_out_low_temp_icon
-                  text_font: icon_font_30
+                  text_font: icon_font_14
                   text: "\U000F050F"
-                  translate_y: 365
-                  translate_x: -90
+                  translate_y: 180
+                  translate_x: -40
 
   pages:
     - id: main_page
@@ -1112,11 +1103,11 @@ lvgl:
         - obj:
             styles: main_content
             layout:
-              pad_column: 15
-              pad_row: 10
+              pad_column: 5
+              pad_row: 5
               type: GRID
               grid_columns: [FR(1), FR(1), FR(1), FR(1)]
-              grid_rows: [FR(30), FR(5), FR(30), FR(5)]
+              grid_rows: [FR(5), FR(1), FR(5), FR(1)]
 
             widgets:
               - button:
@@ -1129,7 +1120,7 @@ lvgl:
                   widgets:
                     - label:
                         id: dining_light_lvgl
-                        text_font: icon_font_80
+                        text_font: icon_font_30
                         text: "\U000F06B5"
                   on_press:
                     - homeassistant.action:
@@ -1154,7 +1145,7 @@ lvgl:
                   widgets:
                     - label:
                         id: big_light_lvgl
-                        text_font: icon_font_80
+                        text_font: icon_font_30
                         text: "\U000F0769"
                   on_click:
                     - homeassistant.action:
@@ -1180,7 +1171,7 @@ lvgl:
                   widgets:
                     - label:
                         id: back_light_lvgl
-                        text_font: icon_font_80
+                        text_font: icon_font_30
                         text: "\U000F0769"
                   on_click:
                     - homeassistant.action:
@@ -1205,7 +1196,7 @@ lvgl:
                   widgets:
                     - label:
                         id: living_room_lvgl
-                        text_font: icon_font_80
+                        text_font: icon_font_30
                         text: "\U000F04B9"
                   on_click:
                     - homeassistant.action:
@@ -1237,7 +1228,7 @@ lvgl:
                   widgets:
                     - label:
                         id: heating_down_lvgl
-                        text_font: icon_font_80
+                        text_font: icon_font_30
                         text: "\U000F0B26"
                   on_press:
                     then:
@@ -1267,13 +1258,12 @@ lvgl:
                   widgets:
                     - label:
                         id: set_temp_lvgl
-                        translate_y: 15
-                        text_font: my_font40
+                        translate_y: 5
+                        text_font: my_font14
                         text: " "
                     - label:
                         id: set_temp_label
-                        translate_y: 55
-                        text_font: my_font16
+                        translate_y: 20
                         text: "Thermostat"
                   on_press:
                     - if:
@@ -1285,7 +1275,7 @@ lvgl:
                               text_color: white
                           - lvgl.label.update:
                              id: set_temp_label
-                             text: "Thermostat\nOn Schedule"
+                             text: "Schedule"
                         else:
                           - homeassistant.action:
                               action: climate.set_preset_mode
@@ -1297,7 +1287,7 @@ lvgl:
                               text_color: white
                           - lvgl.label.update:
                              id: set_temp_label
-                             text: "Thermostat\nOn Schedule"
+                             text: "Schedule"
 
               - label:
                   grid_cell_column_pos: 1 # place the widget in
@@ -1317,13 +1307,12 @@ lvgl:
                   widgets:
                     - label:
                         id: ds_climate_actual_temp_lvgl
-                        translate_y: 15
-                        text_font: my_font40
+                        translate_y: 5
+                        text_font: my_font14
                         text: " "
                     - label:
                         id: ds_climate_actual_temp_label
-                        translate_y: 55
-                        text_font: my_font22
+                        translate_y: 20
                         text: "Actual"
 
 
@@ -1347,7 +1336,7 @@ lvgl:
                   widgets:
                     - label:
                         id: climate_up_lvgl
-                        text_font: icon_font_80
+                        text_font: icon_font_30
                         text: "\U000F0B2C"
                   on_press:
                     then:
@@ -1371,7 +1360,7 @@ lvgl:
                     - label:
                         id: more_label
                         translate_y: -8
-                        text_font: my_font16
+                        text_font: my_font8
                         text_color: bg_purple
                         text: "More ->"
                         text_align: CENTER
@@ -1387,9 +1376,9 @@ lvgl:
               - label:
                   id: display_cur_elec_usage
                   align: TOP_LEFT
-                  translate_x: 80
-                  translate_y: 20
-                  text_font: my_font18
+                  translate_x: 20
+                  translate_y: 5
+                  text_font: my_font10
                   text_color: bg_purple
                   text: "Cur Elect Usage"
 
@@ -1398,7 +1387,7 @@ lvgl:
                   align: TOP_LEFT
                   translate_y: 45
                   translate_x: 80
-                  text_font: my_font18
+                  text_font: my_font10
                   text_color: bg_purple
                   text: "Daily Elect Usage"
 
@@ -1407,16 +1396,16 @@ lvgl:
                   align: TOP_LEFT
                   translate_y: 70
                   translate_x: 80
-                  text_font: my_font18
+                  text_font: my_font10
                   text_color: bg_purple
                   text: "Cost"
 
               - label:
                   id: display_energy_icon
                   align: TOP_LEFT
-                  translate_y: 10
+                  translate_y: 5
                   text_color: leaf_green
-                  text_font: icon_font_60
+                  text_font: icon_font_20
                   text: "\U000F032A"
 
               - label:
@@ -1435,7 +1424,7 @@ lvgl:
                   align: TOP_LEFT
                   translate_y: 20
                   text_color: light_blue
-                  text_font: icon_font_60
+                  text_font: icon_font_20
                   text: "\U000F12D3"
                   on_press:
                     - homeassistant.action:
@@ -1455,7 +1444,7 @@ lvgl:
                   align: TOP_LEFT
                   translate_x: 70
                   translate_y: 50
-                  text_font: my_font18
+                  text_font: my_font10
                   text_color: bg_purple
                   text: " "
 
