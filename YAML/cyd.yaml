@@ -1,6 +1,6 @@
 substitutions:
-  name: jarvis-cyd
-  friendly_name: cyd-jarvis
+  name: jarvis-cyd2
+  friendly_name: cyd2-jarvis
   api_key: !secret api_key
 
 #Sensors
@@ -32,8 +32,8 @@ substitutions:
   # Page 1
   living_room_lamp1: light.piano_lamp
   # Page 2
-  masterbed_lamp_left: light.master_bed_lamp_left
-  masterbed_lamp_right: light.master_bed_lamp_right
+  masterbed_lamp_left: light.master_bedroom_lamp_left
+  masterbed_lamp_right: light.master_bedroom_lamp_right
 
 
   font_glyphs: '&@!"''%()<>+=,-_.:°/$€£¥?0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyzÀàÁáÂâÃãÄäĀāĂăÅåǺǻẠạĄąÆæǼǽĆćĈĉČčĊċÇçĎďĐđÐðÈèÉéÊêẼẽĚěËëĒēĔĕĖėẸẹĘęĜĝǦǧĞğĠġĢģĤĥĦħıÌìÍíÎîĨĩÏïĪīĬĭİỊịĮįȷĴĵĶķĸĹĺĽľĻļŁłĿŀŃńÑñŇňŅņƝɲŊŋŉÒòÓóÔôÕõÖöŌōŎŏŐőỌọǪǫØøǾǿŒœŔŕŘřŖŗŚśŜŝŠšŞşȘșẞßŤťŢţȚțŦŧÞþÙùÚúÛûŨũÜüŪūŬŭŮůŰűỤụŲųẀẁẂẃŴŵẄẅỲỳÝýŶŷỸỹŸÿȲȳŹźŽžŻżĲĳƏə'
@@ -42,7 +42,8 @@ esphome:
   name: ${name}
   friendly_name: ${friendly_name}
   platformio_options:
-    board_build.partitions: "/home/jeremiah/Desktop/ESP-Devices/CYD/YAML/part.csv"
+    board_build.f_flash: 80000000L
+    board_build.flash_size: 8MB
   on_boot:
     script.execute: backlight_off
 
@@ -50,14 +51,16 @@ esp32:
   board: esp32dev
   framework:
     type: esp-idf
-  flash_size: 4MB
+    sdkconfig_options:
+      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"    
+  flash_size: 8MB
 
 api:
   encryption:
     key: ${api_key}
 
 logger:
-  level: DEBUG
+  level: WARN
 
 wifi:
   ssid: !secret wifi_ssid
@@ -100,8 +103,8 @@ touchscreen:
   update_interval: 50ms
   threshold: 400
   calibration:
-    x_min: 3860
-    x_max: 280
+    x_min: 280
+    x_max: 3860
     y_min: 340
     y_max: 3860
   transform:
@@ -196,7 +199,7 @@ text_sensor:
                 text_color: white
             - lvgl.label.update:
                 id: set_temp_label
-                text: "Schedule"
+                text: "Sched"
           else:
             - lvgl.label.update:
                 id: set_temp_lvgl
@@ -225,7 +228,7 @@ text_sensor:
             - lvgl.label.update:
                 id: display_garage_icon
                 text: "\U000F12D3"
-                text_color: leaf_green
+                text_color: green
           else:
             - lvgl.label.update:
                 id: display_garage_icon
@@ -465,21 +468,21 @@ sensor:
 
   - platform: homeassistant
     id: in_temp
-    entity_id: ${ds_climate_entity}
+    entity_id: ${us_climate_entity}
     internal: true
     filters:
       - lambda: return x;
     unit_of_measurement: "°F"
     on_value:
       - lvgl.label.update:
-          id: ds_climate_actual_temp_lvgl
+          id: us_climate_actual_temp_lvgl
           text:
             format: "%.0f°F"
             args: [ 'x' ]
 
   - platform: homeassistant
     id: set_temp
-    entity_id: ${ds_set_climate_entity}
+    entity_id: ${us_set_climate_entity}
     attribute: temperature
     internal: true
     filters:
@@ -644,9 +647,10 @@ binary_sensor:
               - lvgl.label.update:
                   id: living_room_lvgl
                   text_color: white
+
   - platform: homeassistant
     id: big_light_state
-    entity_id: switch.big_light_esp
+    entity_id: ${masterbed_lamp_right}
     internal: true
     on_state:
       then:
@@ -668,7 +672,7 @@ binary_sensor:
 
   - platform: homeassistant
     id: back_light_state
-    entity_id: switch.back_room_esp
+    entity_id: ${masterbed_lamp_left}
     internal: true
     on_state:
       then:
@@ -693,56 +697,56 @@ font:
     id: my_font8
     size: 8
     bpp: 4
-    glyphs:
-      '${font_glyphs}'
+#    glyphs:
+#      '${font_glyphs}'
 
   - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
     id: my_font12
     size: 12
     bpp: 4
-    glyphs:
-      '${font_glyphs}'
+#    glyphs:
+#      '${font_glyphs}'
 
   - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
     id: my_font14
     size: 14
     bpp: 4
-    glyphs:
-      '${font_glyphs}'
+#    glyphs:
+#      '${font_glyphs}'
 
   - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
     id: my_font10
     size: 10
     bpp: 4
-    glyphs:
-      '${font_glyphs}'
+#    glyphs:
+#      '${font_glyphs}'
 
   - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
     id: my_font22
     size: 22
     bpp: 4
-    glyphs:
-      '${font_glyphs}'
+#    glyphs:
+#      '${font_glyphs}'
 
   - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
     id: temp_font14
     size: 14
     bpp: 4
-    glyphs:
-      '${font_glyphs}'
+#    glyphs:
+#      '${font_glyphs}'
 
   - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
     id: weather_font12
     size: 12
     bpp: 4
-    glyphs:
-      '${font_glyphs}'
+#    glyphs:
+#      '${font_glyphs}'
 
   - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
     id: clock_font16
     size: 16
-    glyphs:
-      '${font_glyphs}'
+#    glyphs:
+#      '${font_glyphs}'
 
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
     id: icon_font_60
@@ -844,9 +848,9 @@ font:
     glyphs: *icon_glyphs
 
 color:
+#  - id: green
+#    hex: '75D15F'
   - id: green
-    hex: '75D15F'
-  - id: leaf_green
     hex: '60A86A'
   - id: red
     hex: 'FF3131'
@@ -979,7 +983,7 @@ lvgl:
       align: BOTTOM_LEFT
       width: 34%
       height: 30%
-      translate_x: 0
+      translate_x: 100
       border_side: TOP
       border_width: 2
       border_color: 0x53334B
@@ -992,12 +996,11 @@ lvgl:
       align: BOTTOM_LEFT
       width: 34%
       height: 30%
-      translate_x: 0
+      translate_x: 210
       border_side: TOP
       border_width: 2
       border_color: 0x53334B
       radius: 0
-
 
     - id: left
       width: 32%
@@ -1149,9 +1152,9 @@ lvgl:
                         text: "\U000F0769"
                   on_click:
                     - homeassistant.action:
-                        action: switch.toggle
+                        action: light.toggle
                         data:
-                          entity_id: switch.big_light_esp
+                          entity_id: ${masterbed_lamp_right}
 
               - label:
                   grid_cell_column_pos: 1 # place the widget in
@@ -1175,9 +1178,9 @@ lvgl:
                         text: "\U000F0769"
                   on_click:
                     - homeassistant.action:
-                        action: switch.toggle
+                        action: light.toggle
                         data:
-                          entity_id: switch.back_room_esp
+                          entity_id: ${masterbed_lamp_left}
               - label:
                   grid_cell_column_pos: 2 # place the widget in
                   grid_cell_row_pos: 1 # the corresponding cell
@@ -1236,7 +1239,7 @@ lvgl:
                           service: climate.set_temperature
                           data:
                             temperature: !lambda "return id(set_temp).state - 1;"
-                            entity_id: ${ds_set_climate_entity}
+                            entity_id: ${us_set_climate_entity}
 
               - label:
                   grid_cell_column_pos: 0 # place the widget in
@@ -1275,19 +1278,19 @@ lvgl:
                               text_color: white
                           - lvgl.label.update:
                              id: set_temp_label
-                             text: "Schedule"
+                             text: "Sched"
                         else:
                           - homeassistant.action:
                               action: climate.set_preset_mode
                               data:
                                 preset_mode: "NoHold"
-                                entity_id: ${ds_set_climate_entity}
+                                entity_id: ${us_set_climate_entity}
                           - lvgl.label.update:
                               id: set_temp_lvgl
                               text_color: white
                           - lvgl.label.update:
                              id: set_temp_label
-                             text: "Schedule"
+                             text: "Sched"
 
               - label:
                   grid_cell_column_pos: 1 # place the widget in
@@ -1306,12 +1309,12 @@ lvgl:
                   grid_cell_y_align: STRETCH
                   widgets:
                     - label:
-                        id: ds_climate_actual_temp_lvgl
+                        id: us_climate_actual_temp_lvgl
                         translate_y: 5
                         text_font: my_font14
                         text: " "
                     - label:
-                        id: ds_climate_actual_temp_label
+                        id: us_climate_actual_temp_label
                         translate_y: 20
                         text: "Actual"
 
@@ -1344,7 +1347,7 @@ lvgl:
                           service: climate.set_temperature
                           data:
                             temperature: !lambda "return id(set_temp).state + 1;"
-                            entity_id: ${ds_set_climate_entity}
+                            entity_id: ${us_set_climate_entity}
 
               - button:
                   checkable: false
@@ -1376,45 +1379,46 @@ lvgl:
               - label:
                   id: display_cur_elec_usage
                   align: TOP_LEFT
-                  translate_x: 20
+                  translate_x: 10
                   translate_y: 5
-                  text_font: my_font10
-                  text_color: bg_purple
-                  text: "Cur Elect Usage"
+                  text_font: my_font12
+                  text_color: white
+                  text: "Current:"
 
               - label:
                   id: display_daily_elect_usage
                   align: TOP_LEFT
-                  translate_y: 45
-                  translate_x: 80
-                  text_font: my_font10
-                  text_color: bg_purple
-                  text: "Daily Elect Usage"
+                  translate_x: 10
+                  translate_y: 18
+                  text_font: my_font12
+                  text_color: white
+                  text: "Daily:"
 
               - label:
                   id: display_elec_cost
                   align: TOP_LEFT
-                  translate_y: 70
-                  translate_x: 80
-                  text_font: my_font10
-                  text_color: bg_purple
-                  text: "Cost"
+                  translate_x: 10
+                  translate_y: 32
+                  text_font: my_font12
+                  text_color: white
+                  text: "Cost:"
 
               - label:
                   id: display_energy_icon
                   align: TOP_LEFT
+                  translate_x: -10
                   translate_y: 5
-                  text_color: leaf_green
+                  text_color: green
                   text_font: icon_font_20
                   text: "\U000F032A"
 
               - label:
                   id: display_energy_title
-                  align: TOP_LEFT
-                  translate_y: -5
-                  translate_x: 15
+                  align: CENTER
+                  translate_x: 0
+                  translate_y: -25
                   text_color: white
-                  text_font: my_font22
+                  text_font: my_font14
                   text: "Energy Usage"
         - obj:
             styles: bottom_content_right
@@ -1422,8 +1426,9 @@ lvgl:
               - label:
                   id: display_garage_icon
                   align: TOP_LEFT
-                  translate_y: 20
-                  text_color: light_blue
+                  translate_x: -5
+                  translate_y: 10
+                  text_color: white
                   text_font: icon_font_20
                   text: "\U000F12D3"
                   on_press:
@@ -1433,23 +1438,17 @@ lvgl:
                           entity_id: ${garage_door}
               - label:
                   id: garage_door_title
-                  align: TOP_LEFT
-                  translate_y: -5
-                  translate_x: 25
+                  align: CENTER
+                  translate_y: -25
+                  translate_x: 0
                   text_color: white
-                  text_font: my_font22
+                  text_font: my_font14
                   text: "Garage Door"
               - label:
                   id: display_garage_status
                   align: TOP_LEFT
-                  translate_x: 70
-                  translate_y: 50
-                  text_font: my_font10
-                  text_color: bg_purple
+                  translate_x: 20
+                  translate_y: 15
+                  text_font: my_font12
+                  text_color: white
                   text: " "
-
-        - obj:
-            styles: bottom_content_left
-
-        - obj:
-            styles: bottom_content_right
