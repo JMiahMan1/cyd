@@ -41,6 +41,7 @@ esphome:
       - script.execute: sync_media
       - script.execute: update_unit_ui
       - script.execute: update_clock_ui
+      - script.execute: apply_rotation
 
 esp32:
   board: esp32dev
@@ -74,26 +75,42 @@ api:
       variables:
         dlg: int
       then:
-        - script.execute: go_media
         - if:
             condition:
-              lambda: return dlg == 1;
+              lambda: return dlg == 3;
             then:
-              - lvgl.widget.show: dl_backdrop
-              - lvgl.widget.show: dl_on
-              - lvgl.widget.hide: dl_pl
+              - script.execute: go_settings
+              - script.execute: update_clock_ui
+              - lvgl.widget.show: ck_backdrop
+              - lvgl.widget.show: ck_dlg
             else:
+              - script.execute: go_media
               - if:
                   condition:
-                    lambda: return dlg == 2;
+                    lambda: return dlg == 1;
                   then:
                     - lvgl.widget.show: dl_backdrop
-                    - lvgl.widget.show: dl_pl
-                    - lvgl.widget.hide: dl_on
-                  else:
-                    - lvgl.widget.hide: dl_backdrop
-                    - lvgl.widget.hide: dl_on
+                    - lvgl.widget.show: dl_on
                     - lvgl.widget.hide: dl_pl
+                  else:
+                    - if:
+                        condition:
+                          lambda: return dlg == 2;
+                        then:
+                          - lvgl.widget.show: dl_backdrop
+                          - lvgl.widget.show: dl_pl
+                          - lvgl.widget.hide: dl_on
+                        else:
+                          - lvgl.widget.hide: dl_backdrop
+                          - lvgl.widget.hide: dl_on
+                          - lvgl.widget.hide: dl_pl
+    - service: set_rotation
+      variables:
+        angle: int
+      then:
+        - lambda: id(g_rot) = std::to_string(angle);
+        - script.execute: apply_rotation
+        - script.execute: update_clock_ui
     - service: set_playlists
       variables:
         p1: string
@@ -302,6 +319,10 @@ globals:
     type: std::string
     restore_value: false
     initial_value: '""'
+  - id: g_rot
+    type: std::string
+    restore_value: true
+    initial_value: '"0"'
   - id: g_dim_tap
     type: std::string
     restore_value: false
@@ -1036,30 +1057,36 @@ script:
       - delay: 3min
       - if:
           condition:
-            lambda: |-
-              auto t = id(sntp_time).now();
-              int s = atoi(id(g_sleep_start).c_str());
-              int e = atoi(id(g_sleep_end).c_str());
-              if (s == e) return false;
-              if (s < e) return t.hour >= s && t.hour < e;
-              return t.hour >= s || t.hour < e;
+            lambda: return id(g_page) == 4 && id(g_st) == "playing";
           then:
-            - light.turn_off:
-                id: backlight
-                transition_length: 2s
+            - script.execute: screen_saver
           else:
-            - lvgl.widget.hide: sidebar_obj
-            - lvgl.page.show: saver_page
-            - lambda: |-
-                id(g_on_saver) = "1";
-            - light.turn_on:
-                id: backlight
-                brightness: 0.25
-                transition_length: 2s
-            - delay: 1min
-            - light.turn_off:
-                id: backlight
-                transition_length: 2s
+            - if:
+                condition:
+                  lambda: |-
+                    auto t = id(sntp_time).now();
+                    int s = atoi(id(g_sleep_start).c_str());
+                    int e = atoi(id(g_sleep_end).c_str());
+                    if (s == e) return false;
+                    if (s < e) return t.hour >= s && t.hour < e;
+                    return t.hour >= s || t.hour < e;
+                then:
+                  - light.turn_off:
+                      id: backlight
+                      transition_length: 2s
+                else:
+                  - lvgl.widget.hide: sidebar_obj
+                  - lvgl.page.show: saver_page
+                  - lambda: |-
+                      id(g_on_saver) = "1";
+                  - light.turn_on:
+                      id: backlight
+                      brightness: 0.25
+                      transition_length: 2s
+                  - delay: 1min
+                  - light.turn_off:
+                      id: backlight
+                      transition_length: 2s
 
   - id: sync_media
     mode: single
@@ -1592,7 +1619,19 @@ script:
             char b[8];
             snprintf(b, sizeof(b), "%d:00", atoi(id(g_sleep_end).c_str()));
             return {b};
+      - lvgl.widget.update:
+          id: rot0
+          state:
+            checked: !lambda return id(g_rot) != "180";
+      - lvgl.widget.update:
+          id: rot180
+          state:
+            checked: !lambda return id(g_rot) == "180";
       - script.execute: time_update
+
+  - id: apply_rotation
+    then:
+      - lvgl.display.set_rotation: !lambda return atoi(id(g_rot).c_str());
 
   - id: weather_update
     then:
@@ -1932,6 +1971,7 @@ color:
 
 lvgl:
   buffer_size: 12%
+  rotation: 0
   displays:
     - device_display
   touchscreens:
@@ -4385,7 +4425,7 @@ lvgl:
                         widgets:
                           - label:
                               text_font: my_font10
-                              text: "Clock & Sleep"
+                              text: "Screen & Sleep"
                         on_click:
                           - lvgl.widget.show: ck_backdrop
                           - lvgl.widget.show: ck_dlg
@@ -4561,7 +4601,7 @@ lvgl:
                   hidden: true
                   align: CENTER
                   width: 94%
-                  height: 208
+                  height: 232
                   widgets:
                     - label:
                         text: "Clock & Sleep"
@@ -4754,4 +4794,47 @@ lvgl:
                         width: 172
                         align: TOP_LEFT
                         translate_x: 16
-                        translate_y: 174
+                        translate_y: 166
+                    - label:
+                        text: "Rotation"
+                        text_font: my_font12
+                        text_color: 0x4A1F45
+                        align: TOP_LEFT
+                        translate_x: 16
+                        translate_y: 198
+                    - button:
+                        id: rot0
+                        styles: tile
+                        checkable: true
+                        align: TOP_LEFT
+                        translate_x: 92
+                        translate_y: 192
+                        width: 46
+                        height: 24
+                        on_click:
+                          - lambda: |-
+                              id(g_rot) = "0";
+                          - script.execute: apply_rotation
+                          - script.execute: update_clock_ui
+                        widgets:
+                          - label:
+                              text: "0°"
+                              text_font: my_font12
+                    - button:
+                        id: rot180
+                        styles: tile
+                        checkable: true
+                        align: TOP_LEFT
+                        translate_x: 142
+                        translate_y: 192
+                        width: 46
+                        height: 24
+                        on_click:
+                          - lambda: |-
+                              id(g_rot) = "180";
+                          - script.execute: apply_rotation
+                          - script.execute: update_clock_ui
+                        widgets:
+                          - label:
+                              text: "180°"
+                              text_font: my_font12
