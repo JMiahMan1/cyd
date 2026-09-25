@@ -3,40 +3,28 @@ substitutions:
   friendly_name: cyd2-jarvis
   api_key: !secret api_key
 
-#Sensors
-  # Weather
-  out_tempature_entity: sensor.weather_temperature
-  real_tempature_entity: sensor.weather_realfeel_temperature
-  out_high_tempature_entity: sensor.weather_realfeel_temperature_max_day_0
-  out_low_tempature_entity: sensor.weather_realfeel_temperature_min_day_0
-  weather_forecast: weather.weather
+  weather_entity: weather.forecast
+  out_temp_entity: sensor.outside_temperature
 
-  # Climate Control
-  #Downstairs
-  ds_climate_entity: sensor.jimmy_thermostat_indoor_temperature
-  ds_set_climate_entity: climate.jimmy_thermostat
-  #Upstairs
-  us_climate_entity: sensor.timmy_thermostat_indoor_temperature
-  us_set_climate_entity: climate.timmy_thermostat
+  ds_climate: climate.downstairs
+  us_climate: climate.tstat_3692f3_t5_thermostat
 
-  # Power Consumption
-  cur_elec_usage: sensor.rosebud_123_1min
-  daily_elect_usage: sensor.rosebud_123_1d
-  elec_cost: sensor.rosebud_123_1d_cost
+  cur_power_entity: sensor.rosebud_123_1min
+  daily_energy_entity: sensor.rosebud_123_1d
+  monthly_energy_entity: sensor.rosebud_123_1mon
+  energy_cost_entity: sensor.rosebud_123_1d_cost
 
-  #Garage
-  garage_door_status: switch.garage_door_garage_status
-  garage_door: switch.garage_door
+  garage_switch: switch.garage_door_2
+  garage_sensor: binary_sensor.garage_door_sensor
 
-  #Lighting
-  # Page 1
-  living_room_lamp1: light.piano_lamp
-  # Page 2
-  masterbed_lamp_left: light.master_bedroom_lamp_left
-  masterbed_lamp_right: light.master_bedroom_lamp_right
-
-
-  font_glyphs: '&@!"''%()<>+=,-_.:°/$€£¥?0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyzÀàÁáÂâÃãÄäĀāĂăÅåǺǻẠạĄąÆæǼǽĆćĈĉČčĊċÇçĎďĐđÐðÈèÉéÊêẼẽĚěËëĒēĔĕĖėẸẹĘęĜĝǦǧĞğĠġĢģĤĥĦħıÌìÍíÎîĨĩÏïĪīĬĭİỊịĮįȷĴĵĶķĸĹĺĽľĻļŁłĿŀŃńÑñŇňŅņƝɲŊŋŉÒòÓóÔôÕõÖöŌōŎŏŐőỌọǪǫØøǾǿŒœŔŕŘřŖŗŚśŜŝŠšŞşȘșẞßŤťŢţȚțŦŧÞþÙùÚúÛûŨũÜüŪūŬŭŮůŰűỤụŲųẀẁẂẃŴŵẄẅỲỳÝýŶŷỸỹŸÿȲȳŹźŽžŻżĲĳƏə'
+  light_kitchen: light.kitchen_light_1
+  light_kitchen_all: light.kitchen_light_1,light.kitchen_light_2,light.kitchen_light_3,light.kitchen_light_4,light.kitchen_light_5,light.kitchen_light_6
+  light_bath: light.upstairs_bathroom_1
+  light_bath_all: light.upstairs_bathroom_1,light.upstairs_bathroom_2,light.upstairs_bathroom_3
+  light_master_left: light.master_bedroom_lamp_left
+  light_master_right: light.master_bedroom_lamp_right
+  light_hall: light.hall_lamp
+  all_lights_off: light.master_bedroom_lamp_left,light.master_bedroom_lamp_right,light.hall_lamp,light.kitchen_light_1,light.kitchen_light_2,light.kitchen_light_3,light.kitchen_light_4,light.kitchen_light_5,light.kitchen_light_6,light.upstairs_bathroom_1,light.upstairs_bathroom_2,light.upstairs_bathroom_3
 
 esphome:
   name: ${name}
@@ -45,19 +33,255 @@ esphome:
     board_build.f_flash: 80000000L
     board_build.flash_size: 8MB
   on_boot:
-    script.execute: backlight_off
+    priority: -100
+    then:
+      - script.execute: boot_seq
+      - script.execute: screen_saver
+      - script.execute: update_playlists
+      - script.execute: sync_media
+      - script.execute: update_unit_ui
 
 esp32:
   board: esp32dev
   framework:
     type: esp-idf
     sdkconfig_options:
-      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"    
+      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"
   flash_size: 8MB
 
 api:
   encryption:
     key: ${api_key}
+  on_client_connected:
+    - homeassistant.action:
+        action: automation.trigger
+        data:
+          entity_id: automation.cyd_playlists_sync
+    - homeassistant.action:
+        action: automation.trigger
+        data:
+          entity_id: automation.cyd_weather_sync
+  services:
+    - service: show_page
+      variables:
+        page: int
+      then:
+        - script.execute:
+            id: goto_page
+            page: !lambda return page;
+    - service: set_playlists
+      variables:
+        p1: string
+        p2: string
+        p3: string
+        u1: string
+        u2: string
+        u3: string
+      then:
+        - lambda: |-
+            id(g_pl1) = p1;
+            id(g_pl2) = p2;
+            id(g_pl3) = p3;
+            id(g_u1) = u1;
+            id(g_u2) = u2;
+            id(g_u3) = u3;
+        - script.execute: update_playlists
+    - service: set_weather
+      variables:
+        n1: string
+        c1: string
+        h1: string
+        l1: string
+        n2: string
+        c2: string
+        h2: string
+        l2: string
+        n3: string
+        c3: string
+        h3: string
+        l3: string
+        n4: string
+        c4: string
+        h4: string
+        l4: string
+      then:
+        - lambda: |-
+            auto icon = [](const std::string &s) -> const char* {
+              if (s == "clear-night") return "\U000F0594";
+              if (s == "cloudy") return "\U000F0590";
+              if (s == "exceptional") return "\U000F0F37";
+              if (s == "fog") return "\U000F0591";
+              if (s == "hail") return "\U000F0592";
+              if (s == "lightning") return "\U000F0593";
+              if (s == "lightning-rainy") return "\U000F067E";
+              if (s == "partlycloudy") return "\U000F0595";
+              if (s == "pouring") return "\U000F0596";
+              if (s == "rainy") return "\U000F0597";
+              if (s == "snowy") return "\U000F0598";
+              if (s == "snowy-rainy") return "\U000F067F";
+              if (s == "sunny") return "\U000F0599";
+              if (s == "windy") return "\U000F059D";
+              if (s == "windy-variant") return "\U000F059E";
+              return "\U000F0590";
+            };
+            auto clean = [](std::string v) -> std::string {
+              if (v.empty() || v == "unknown" || v == "None" || v == "unavailable") return "--";
+              return v;
+            };
+            auto num = [](const std::string &v) -> float {
+              if (v.empty() || v == "unknown" || v == "None" || v == "unavailable") return NAN;
+              return atof(v.c_str());
+            };
+            lv_label_set_text(id(wx_day1), clean(n1).c_str());
+            lv_label_set_text(id(wx_icon1), icon(c1));
+            lv_label_set_text(id(wx_day2), clean(n2).c_str());
+            lv_label_set_text(id(wx_icon2), icon(c2));
+            lv_label_set_text(id(wx_day3), clean(n3).c_str());
+            lv_label_set_text(id(wx_icon3), icon(c3));
+            lv_label_set_text(id(wx_day4), clean(n4).c_str());
+            lv_label_set_text(id(wx_icon4), icon(c4));
+            id(g_w1h) = num(h1); id(g_w1l) = num(l1);
+            id(g_w2h) = num(h2); id(g_w2l) = num(l2);
+            id(g_w3h) = num(h3); id(g_w3l) = num(l3);
+            id(g_w4h) = num(h4); id(g_w4l) = num(l4);
+        - script.execute: update_weather_temps
+
+globals:
+  - id: g_media
+    type: std::string
+    restore_value: true
+    initial_value: '""'
+  - id: g_pl1
+    type: std::string
+    restore_value: true
+    initial_value: '""'
+  - id: g_pl2
+    type: std::string
+    restore_value: true
+    initial_value: '""'
+  - id: g_pl3
+    type: std::string
+    restore_value: true
+    initial_value: '""'
+  - id: g_u1
+    type: std::string
+    restore_value: true
+    initial_value: '""'
+  - id: g_u2
+    type: std::string
+    restore_value: true
+    initial_value: '""'
+  - id: g_u3
+    type: std::string
+    restore_value: true
+    initial_value: '""'
+  - id: g_pl4
+    type: std::string
+    restore_value: true
+    initial_value: '""'
+  - id: g_u4
+    type: std::string
+    restore_value: true
+    initial_value: '""'
+  - id: g_pl5
+    type: std::string
+    restore_value: true
+    initial_value: '""'
+  - id: g_u5
+    type: std::string
+    restore_value: true
+    initial_value: '""'
+  - id: g_pl6
+    type: std::string
+    restore_value: true
+    initial_value: '""'
+  - id: g_u6
+    type: std::string
+    restore_value: true
+    initial_value: '""'
+  - id: g_fav
+    type: std::string
+  - id: g_st
+    type: std::string
+  - id: g_ti
+    type: std::string
+  - id: g_ar
+    type: std::string
+  - id: g_d1
+    type: std::string
+  - id: g_d2
+    type: std::string
+  - id: g_d3
+    type: std::string
+  - id: g_d4
+    type: std::string
+  - id: g_d1n
+    type: std::string
+  - id: g_d2n
+    type: std::string
+  - id: g_d3n
+    type: std::string
+  - id: g_d4n
+    type: std::string
+  - id: g_d5
+    type: std::string
+  - id: g_d5n
+    type: std::string
+  - id: g_d6
+    type: std::string
+  - id: g_d6n
+    type: std::string
+  - id: g_d7
+    type: std::string
+  - id: g_d7n
+    type: std::string
+  - id: g_d8
+    type: std::string
+  - id: g_d8n
+    type: std::string
+  - id: g_unit
+    type: std::string
+    restore_value: true
+    initial_value: '"F"'
+  - id: g_out_t
+    type: float
+    initial_value: 'NAN'
+  - id: g_ds_act
+    type: float
+    initial_value: 'NAN'
+  - id: g_ds_set
+    type: float
+    initial_value: 'NAN'
+  - id: g_us_act
+    type: float
+    initial_value: 'NAN'
+  - id: g_us_set
+    type: float
+    initial_value: 'NAN'
+  - id: g_w1h
+    type: float
+    initial_value: 'NAN'
+  - id: g_w1l
+    type: float
+    initial_value: 'NAN'
+  - id: g_w2h
+    type: float
+    initial_value: 'NAN'
+  - id: g_w2l
+    type: float
+    initial_value: 'NAN'
+  - id: g_w3h
+    type: float
+    initial_value: 'NAN'
+  - id: g_w3l
+    type: float
+    initial_value: 'NAN'
+  - id: g_w4h
+    type: float
+    initial_value: 'NAN'
+  - id: g_w4l
+    type: float
+    initial_value: 'NAN'
 
 logger:
   level: WARN
@@ -69,13 +293,24 @@ wifi:
 ota:
   platform: esphome
 
+interval:
+  - interval: 5s
+    then:
+      - lvgl.widget.update:
+          id: led_switch
+          state:
+            checked: !lambda return id(led).remote_values.is_on();
+  - interval: 10s
+    then:
+      - script.execute: sync_media
+
 time:
   - platform: sntp
     id: sntp_time
     servers:
-     - ntp0.ntp-servers.net
-     - ntp1.ntp-servers.net
-     - ntp2.ntp-servers.net
+      - ntp0.ntp-servers.net
+      - ntp1.ntp-servers.net
+      - ntp2.ntp-servers.net
     on_time_sync:
       - script.execute: time_update
     on_time:
@@ -113,13 +348,13 @@ touchscreen:
     swap_xy: true
   on_touch:
     then:
-      - script.execute: backlight_off
-      - lambda: |-
-          ESP_LOGI("Touch", "Touch detected at x=%d, y=%d", touch.x, touch.y);
+      - script.execute: screen_saver
+
 display:
   - platform: ili9xxx
     id: device_display
     model: ILI9342
+    color_order: RGB
     dimensions:
       width: 320
       height: 240
@@ -128,14 +363,12 @@ display:
     dc_pin: GPIO2
     rotation: 0
     invert_colors: false
-    auto_clear_enabled: False
+    auto_clear_enabled: false
 
-# Setup a pin to control the backlight
 output:
   - platform: ledc
     pin: GPIO21
     id: backlight_pwm
-# Setup channels for the red/green/blue of the LED on the back
   - platform: ledc
     pin: GPIO4
     id: led_red
@@ -150,13 +383,11 @@ output:
     inverted: true
 
 light:
-# Set up display backlight
   - platform: monochromatic
     output: backlight_pwm
     name: Display Backlight
     id: backlight
     restore_mode: ALWAYS_ON
-# Set up LED on the back and turn it off by default
   - platform: rgb
     name: RGB
     id: led
@@ -171,6 +402,10 @@ text_sensor:
       name: IP Address
       id: ip_addr
       entity_category: "diagnostic"
+      on_value:
+        - lvgl.label.update:
+            id: sys_ip
+            text: !lambda return std::string("IP ") + x;
     ssid:
       id: connected_ssid
       name: SSID
@@ -183,272 +418,80 @@ text_sensor:
       id: device_mac
 
   - platform: homeassistant
-    id: set_temp_mode
-    entity_id: ${ds_set_climate_entity}
-    internal: true
-    attribute: preset_mode
-    filters:
-      - lambda: return x;
-    on_value:
-      - if:
-          condition:
-            - lambda: return x == "NoHold";
-          then:
-            - lvgl.label.update:
-                id: set_temp_lvgl
-                text_color: white
-            - lvgl.label.update:
-                id: set_temp_label
-                text: "Sched"
-          else:
-            - lvgl.label.update:
-                id: set_temp_lvgl
-                text_color: blue
-            - lvgl.label.update:
-                id: set_temp_label
-                text: "Manual"
-
-  - platform: homeassistant
-    id: garage
-    entity_id: ${garage_door_status}
-    internal: true
-    on_value:
-      - if:
-          condition:
-            - lambda: return x == "off";
-          then:
-            - lvgl.label.update:
-                id: display_garage_icon
-                text: "\U000F12D3"
-                text_color: yellow
-            - lvgl.label.update:
-                id: display_garage_status
-                text: "Closed"
-            - delay: 2s
-            - lvgl.label.update:
-                id: display_garage_icon
-                text: "\U000F12D3"
-                text_color: green
-          else:
-            - lvgl.label.update:
-                id: display_garage_icon
-                text: "\U000F12D4"
-                text_color: yellow
-            - lvgl.label.update:
-                id: display_garage_status
-                text: "Open"
-            - delay: 2s
-            - lvgl.label.update:
-                text: "\U000F12D4"
-                id: display_garage_icon
-                text_color: red
-
-  - platform: homeassistant
     id: weather_forecast
-    entity_id: ${weather_forecast}
+    entity_id: ${weather_entity}
+    internal: true
     on_value:
-      then:
-        - script.execute: weather_update
-script:
-  - id: backlight_off
-    then:
-      - if:
-          condition:
-            light.is_off: backlight
-          then:
-            - lvgl.resume:
-            - delay: 100ms
-            - light.turn_on: backlight
-            - delay: 180s
-            - light.turn_off: backlight
-            - lvgl.page.show: main_page
-            - lvgl.pause:
-            - logger.log: "LVGL is idle"
-            - light.turn_off:
-                id: backlight
-                transition_length: 5s
+      - script.execute: weather_update
 
-  - id: weather_update
-    then:
-      - if:
-          condition:
-            - lambda: return id(weather_forecast).state == "rainy";
-          then:
-            - lvgl.label.update:
-                id: display_weather
-                text_font: icon_font_60
-                text: "\U000F0597"
-          else:
-            - if:
-                condition:
-                  - lambda: return id(weather_forecast).state == "clear-night";
-                then:
-                  - lvgl.label.update:
-                      id: display_weather
-                      text_font: icon_font_60
-                      text: "\U000F0594"
-                else:
-                  - if:
-                      condition:
-                        - lambda: return id(weather_forecast).state == "exceptional";
-                      then:
-                        - lvgl.label.update:
-                            id: display_weather
-                            text_font: icon_font_60
-                            text: "\U000F0590"
-                      else:
-                        - if:
-                            condition:
-                              - lambda: return id(weather_forecast).state == "hail";
-                            then:
-                              - lvgl.label.update:
-                                  id: display_weather
-                                  text_font: icon_font_60
-                                  text: "\U000F0592"
-                            else:
-                              - if:
-                                  condition:
-                                    - lambda: return id(weather_forecast).state == "lightning";
-                                  then:
-                                    - lvgl.label.update:
-                                        id: display_weather
-                                        text_font: icon_font_60
-                                        text: "\U000F0593"
-                                  else:
-                                    - if:
-                                        condition:
-                                          - lambda: return id(weather_forecast).state == "lightning-rainy";
-                                        then:
-                                          - lvgl.label.update:
-                                              id: display_weather
-                                              text_font: icon_font_60
-                                              text: "\U000F067E"
-                                        else:
-                                          - if:
-                                              condition:
-                                                - lambda: return id(weather_forecast).state == "partlycloudy";
-                                              then:
-                                                - lvgl.label.update:
-                                                    id: display_weather
-                                                    text_font: icon_font_60
-                                                    text: "\U000F0595"
-                                              else:
-                                                - if:
-                                                    condition:
-                                                      - lambda: return id(weather_forecast).state == "pouring";
-                                                    then:
-                                                      - lvgl.label.update:
-                                                          id: display_weather
-                                                          text_font: icon_font_60
-                                                          text: "\U000F0596"
-                                                    else:
-                                                      - if:
-                                                          condition:
-                                                            - lambda: return id(weather_forecast).state == "snowy";
-                                                          then:
-                                                            - lvgl.label.update:
-                                                                id: display_weather
-                                                                text_font: icon_font_60
-                                                                text: "\U000F0598"
-                                                          else:
-                                                            - if:
-                                                                condition:
-                                                                  - lambda: return id(weather_forecast).state == "snowy-rainy";
-                                                                then:
-                                                                  - lvgl.label.update:
-                                                                      id: display_weather
-                                                                      text_font: icon_font_60
-                                                                      text: "\U000F067F"
-                                                                else:
-                                                                  - if:
-                                                                      condition:
-                                                                        - lambda: return id(weather_forecast).state.find("sunny");
-                                                                      then:
-                                                                        - lvgl.label.update:
-                                                                            id: display_weather
-                                                                            text_font: icon_font_60
-                                                                            text: "\U000F0599"
-                                                                      else:
-                                                                        - if:
-                                                                            condition:
-                                                                              - lambda: return id(weather_forecast).state == "sunny-rainy";
-                                                                            then:
-                                                                              - lvgl.label.update:
-                                                                                  id: display_weather
-                                                                                  text_font: icon_font_60
-                                                                                  text: "\U000F0596"
-                                                                            else:
-                                                                              - if:
-                                                                                  condition:
-                                                                                    - lambda: return id(weather_forecast).state == "windy";
-                                                                                  then:
-                                                                                    - lvgl.label.update:
-                                                                                        id: display_weather
-                                                                                        text_font: icon_font_60
-                                                                                        text: "\U000F059D"
-                                                                                  else:
-                                                                                    - if:
-                                                                                        condition:
-                                                                                          - lambda: return id(weather_forecast).state == "windy-variant";
-                                                                                        then:
-                                                                                          - lvgl.label.update:
-                                                                                              id: display_weather
-                                                                                              text_font: icon_font_60
-                                                                                              text: "\U000F059E"
-                                                                                        else:
-                                                                                          - if:
-                                                                                              condition:
-                                                                                                - lambda: return id(weather_forecast).state.find("sizzling");
-                                                                                              then:
-                                                                                                - lvgl.label.update:
-                                                                                                    id: display_weather
-                                                                                                    text_font: icon_font_60
-                                                                                                    text: "\U000F0F37"
-                                                                                              else:
-                                                                                                - if:
-                                                                                                    condition:
-                                                                                                      - lambda: return id(weather_forecast).state.find("cloudy");
-                                                                                                    then:
-                                                                                                      - lvgl.label.update:
-                                                                                                          id: display_weather
-                                                                                                          text_font: icon_font_60
-                                                                                                          text: "\U000F0590"
-
-  - id: time_update
-    then:
+  - platform: homeassistant
+    id: ds_state
+    entity_id: ${ds_climate}
+    internal: true
+    on_value:
       - lvgl.label.update:
-          id: display_time
+          id: ds_state_text
           text: !lambda |-
-            char str[20];
-            time_t currTime = id(sntp_time).now().timestamp;
-            strftime(str, sizeof(str), "%I:%M%p", localtime(&currTime));
-            return { str };
+            if (x == "heat") return {"Heat"};
+            if (x == "cool") return {"Cool"};
+            if (x == "heat_cool") return {"Auto"};
+            return {"Off"};
+          text_color: !lambda |-
+            if (x == "heat") return id(heat_orange);
+            if (x == "cool") return id(cool_blue);
+            return id(bg_grey);
+      - lvgl.widget.update:
+          id: ds_heat
+          state:
+            checked: !lambda return x == "heat";
+      - lvgl.widget.update:
+          id: ds_cool
+          state:
+            checked: !lambda return x == "cool";
+      - lvgl.widget.update:
+          id: ds_off
+          state:
+            checked: !lambda return x == "off";
 
+  - platform: homeassistant
+    id: us_state
+    entity_id: ${us_climate}
+    internal: true
+    on_value:
       - lvgl.label.update:
-          id: display_day
+          id: us_state_text
           text: !lambda |-
-            static const char * const days_en[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
-            static char date_buf[32];
-            auto now = id(sntp_time).now();
-            const char * const * day_names;
+            if (x == "heat") return {"Heat"};
+            if (x == "cool") return {"Cool"};
+            if (x == "heat_cool") return {"Auto"};
+            return {"Off"};
+          text_color: !lambda |-
+            if (x == "heat") return id(heat_orange);
+            if (x == "cool") return id(cool_blue);
+            return id(bg_grey);
+      - lvgl.widget.update:
+          id: us_heat
+          state:
+            checked: !lambda return x == "heat";
+      - lvgl.widget.update:
+          id: us_cool
+          state:
+            checked: !lambda return x == "cool";
+      - lvgl.widget.update:
+          id: us_off
+          state:
+            checked: !lambda return x == "off";
 
-            day_names = days_en;
-
-            snprintf(date_buf, sizeof(date_buf), "%s", day_names[now.day_of_week - 1]);
-            return date_buf;
-
-      - lvgl.label.update:
-          id: display_date
-          text: !lambda |-
-            static const char * const mon_en[] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
-            static char month_buf[32];
-            auto now = id(sntp_time).now();
-            const char * const * mon_names;
-
-            mon_names = mon_en;
-
-            snprintf(month_buf, sizeof(month_buf), "%02d %s", now.day_of_month, mon_names[now.month - 1]);
-            return month_buf;
+  - platform: homeassistant
+    id: ds_fan_state
+    entity_id: ${ds_climate}
+    attribute: fan_mode
+    internal: true
+    on_value:
+      - lvgl.widget.update:
+          id: ds_fan
+          state:
+            checked: !lambda return x == "on";
 
 sensor:
   - platform: wifi_signal
@@ -465,391 +508,1043 @@ sensor:
     unit_of_measurement: "%"
     entity_category: "diagnostic"
     device_class: ""
-
-  - platform: homeassistant
-    id: in_temp
-    entity_id: ${us_climate_entity}
-    internal: true
-    filters:
-      - lambda: return x;
-    unit_of_measurement: "°F"
     on_value:
       - lvgl.label.update:
-          id: us_climate_actual_temp_lvgl
-          text:
-            format: "%.0f°F"
-            args: [ 'x' ]
+          id: sys_wifi
+          text: !lambda |-
+            char b[32];
+            snprintf(b, sizeof(b), "WiFi Signal %.0f%%", x);
+            return {b};
 
-  - platform: homeassistant
-    id: set_temp
-    entity_id: ${us_set_climate_entity}
-    attribute: temperature
+  - platform: uptime
+    id: device_uptime
     internal: true
-    filters:
-      - lambda: return x;
-    unit_of_measurement: "°F"
-    on_value:
-      - if:
-          condition:
-            - lambda: return isnan(x);
-          then:
-            - lvgl.label.update:
-                id: set_temp_lvgl
-                text: "Off"
-          else:
-            - lvgl.label.update:
-                id: set_temp_lvgl
-                text:
-                  format: "%.0f°F"
-                  args: [ 'x' ]
-
-  - platform: template
-    name: "temperature_sensor_template"
-    id: set_temp_template
-    lambda: |-
-      return id(set_temp).state;
     update_interval: 30s
     on_value:
-      - if:
-          condition:
-            - lambda: return isnan(id(set_temp).state);
-          then:
-            - lvgl.label.update:
-                id: set_temp_lvgl
-                text: "Off"
-          else:
-            - lvgl.label.update:
-                id: set_temp_lvgl
-                text:
-                  format: "%.0f°F"
-                  args: [ 'x' ]
-
-  - platform: homeassistant
-    id: real_feel_temp
-    entity_id: ${real_tempature_entity}
-    internal: true
-    on_value:
       - lvgl.label.update:
-          id: real_feel_temp_lvgl
-          text:
-            format: "Feel: %.0f°F"
-            args: [ 'x' ]
+          id: sys_uptime
+          text: !lambda |-
+            int s = (int) x;
+            int d = s / 86400;
+            s %= 86400;
+            int h = s / 3600;
+            s %= 3600;
+            int m = s / 60;
+            char b[32];
+            if (d > 0) snprintf(b, sizeof(b), "Online %dd %dh", d, h);
+            else if (h > 0) snprintf(b, sizeof(b), "Online %dh %dm", h, m);
+            else snprintf(b, sizeof(b), "Online %dm", m);
+            return {b};
 
   - platform: homeassistant
     id: out_temp
-    entity_id: ${out_tempature_entity}
+    entity_id: ${out_temp_entity}
     internal: true
     on_value:
-      - lvgl.label.update:
-          id: display_out_temp
-          text:
-            format: "Real: %.0f°F"
-            args: [ 'x' ]
+      - lambda: id(g_out_t) = x;
+      - script.execute: update_temps
 
   - platform: homeassistant
-    id: out_temp_high
-    entity_id: ${out_high_tempature_entity}
+    id: ds_actual
+    entity_id: ${ds_climate}
+    attribute: current_temperature
     internal: true
     on_value:
-      - lvgl.label.update:
-          id: display_out_high_temp
-          text:
-            format: "High: %.0f°F"
-            args: [ 'x' ]
+      - lambda: id(g_ds_act) = x;
+      - script.execute: update_temps
 
   - platform: homeassistant
-    id: out_temp_low
-    entity_id: ${out_low_tempature_entity}
+    id: ds_humidity
+    entity_id: ${ds_climate}
+    attribute: current_humidity
     internal: true
     on_value:
       - lvgl.label.update:
-          id: display_out_low_temp
-          text:
-            format: "Low: %.0f°F"
-            args: [ 'x' ]
+          id: ds_hum
+          text: !lambda |-
+            if (isnan(x)) return {"--"};
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f%% RH", x);
+            return {b};
 
   - platform: homeassistant
-    id: cur_elec_usage
-    entity_id: ${cur_elec_usage}
+    id: ds_set
+    entity_id: ${ds_climate}
+    attribute: temperature
     internal: true
     on_value:
-      - lvgl.label.update:
-          id: display_cur_elec_usage
-          text:
-            format: "Current: %.0fkW"
-            args: [ 'x' ]
+      - lambda: id(g_ds_set) = x;
+      - script.execute: update_temps
 
   - platform: homeassistant
-    id: daily_elect_usage
-    entity_id: ${daily_elect_usage}
+    id: us_actual
+    entity_id: ${us_climate}
+    attribute: current_temperature
     internal: true
     on_value:
-      - lvgl.label.update:
-          id: display_daily_elect_usage
-          text:
-            format: "Daily: %.0fkW"
-            args: [ 'x' ]
+      - lambda: id(g_us_act) = x;
+      - script.execute: update_temps
 
   - platform: homeassistant
-    id: elec_cost
-    entity_id: ${elec_cost}
+    id: us_set
+    entity_id: ${us_climate}
+    attribute: temperature
+    internal: true
+    on_value:
+      - lambda: id(g_us_set) = x;
+      - script.execute: update_temps
+
+  - platform: homeassistant
+    id: cur_power
+    entity_id: ${cur_power_entity}
     internal: true
     on_value:
       - lvgl.label.update:
-          id: display_elec_cost
-          text:
-            format: "Cost: $%.2f"
-            args: [ 'x' ]
+          id: home_energy_now
+          text: !lambda |-
+            char b[24];
+            snprintf(b, sizeof(b), "%.1f kW", x);
+            return {b};
+      - lvgl.label.update:
+          id: energy_now
+          text: !lambda |-
+            char b[24];
+            snprintf(b, sizeof(b), "%.2f kW", x);
+            return {b};
+
+  - platform: homeassistant
+    id: daily_energy
+    entity_id: ${daily_energy_entity}
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: energy_today
+          text: !lambda |-
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f", x);
+            return {b};
+
+  - platform: homeassistant
+    id: monthly_energy
+    entity_id: ${monthly_energy_entity}
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: energy_month
+          text: !lambda |-
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f", x);
+            return {b};
+
+  - platform: homeassistant
+    id: energy_cost
+    entity_id: ${energy_cost_entity}
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: energy_cost_value
+          text: !lambda |-
+            char b[24];
+            snprintf(b, sizeof(b), "$%.2f", x);
+            return {b};
+      - lvgl.label.update:
+          id: home_energy_cost
+          text: !lambda |-
+            char b[24];
+            snprintf(b, sizeof(b), "$%.2f", x);
+            return {b};
 
 binary_sensor:
   - platform: homeassistant
-    id: dining_state
-    entity_id: ${living_room_lamp1}
+    id: garage_status
+    entity_id: ${garage_sensor}
     internal: true
-    publish_initial_state: true
+    trigger_on_initial_state: true
     on_state:
-      then:
-        - lvgl.widget.update:
-            id: button_1
-            state:
-              checked: !lambda return x;
-        - if:
-            condition:
-              lambda: return x == true;
-            then:
-              - lvgl.label.update:
-                  id: dining_light_lvgl
-                  text_color: yellow
-            else:
-              - lvgl.label.update:
-                  id: dining_light_lvgl
-                  text_color: white
+      - lvgl.label.update:
+          id: home_garage_icon
+          text: !lambda if (x) return "\U000F12D4"; return "\U000F12D3";
+          text_color: !lambda if (x) return id(red); return id(green);
+      - lvgl.label.update:
+          id: home_garage_state
+          text: !lambda if (x) return "Open"; return "Closed";
 
   - platform: homeassistant
-    id: living_room_state
-    entity_id: switch.living_room
+    id: kitchen_state
+    entity_id: ${light_kitchen}
     internal: true
-    publish_initial_state: true
+    trigger_on_initial_state: true
     on_state:
-      then:
-        - lvgl.widget.update:
-            id: button_4
-            state:
-              checked: !lambda return x;
-        - if:
-            condition:
-              lambda: return x == true;
-            then:
-              - lvgl.label.update:
-                  id: living_room_lvgl
-                  text_color: yellow
-            else:
-              - lvgl.label.update:
-                  id: living_room_lvgl
-                  text_color: white
+      - lvgl.widget.update:
+          id: btn_kitchen
+          state:
+            checked: !lambda return x;
+      - lvgl.label.update:
+          id: lbl_kitchen
+          text_color: !lambda if (x) return id(bg_blue); return id(white);
 
   - platform: homeassistant
-    id: big_light_state
-    entity_id: ${masterbed_lamp_right}
+    id: bath_state
+    entity_id: ${light_bath}
     internal: true
+    trigger_on_initial_state: true
     on_state:
-      then:
-        - lvgl.widget.update:
-            id: button_2
-            state:
-              checked: !lambda return x;
-        - if:
-            condition:
-              lambda: return x == true;
-            then:
-              - lvgl.label.update:
-                  id: big_light_lvgl
-                  text_color: yellow
-            else:
-              - lvgl.label.update:
-                  id: big_light_lvgl
-                  text_color: white
+      - lvgl.widget.update:
+          id: btn_bath
+          state:
+            checked: !lambda return x;
+      - lvgl.label.update:
+          id: lbl_bath
+          text_color: !lambda if (x) return id(bg_blue); return id(white);
 
   - platform: homeassistant
-    id: back_light_state
-    entity_id: ${masterbed_lamp_left}
+    id: master_left_state
+    entity_id: ${light_master_left}
     internal: true
+    trigger_on_initial_state: true
     on_state:
-      then:
-        - lvgl.widget.update:
-            id: button_3
-            state:
-              checked: !lambda return x;
-        - if:
-            condition:
-              lambda: return x == true;
-            then:
-              - lvgl.label.update:
-                  id: back_light_lvgl
-                  text_color: yellow
-            else:
-              - lvgl.label.update:
-                  id: back_light_lvgl
-                  text_color: white
+      - lvgl.widget.update:
+          id: btn_master_l
+          state:
+            checked: !lambda return x;
+      - lvgl.label.update:
+          id: lbl_master_l
+          text_color: !lambda if (x) return id(bg_blue); return id(white);
+
+  - platform: homeassistant
+    id: master_right_state
+    entity_id: ${light_master_right}
+    internal: true
+    trigger_on_initial_state: true
+    on_state:
+      - lvgl.widget.update:
+          id: btn_master_r
+          state:
+            checked: !lambda return x;
+      - lvgl.label.update:
+          id: lbl_master_r
+          text_color: !lambda if (x) return id(bg_blue); return id(white);
+
+  - platform: homeassistant
+    id: hall_state
+    entity_id: ${light_hall}
+    internal: true
+    trigger_on_initial_state: true
+    on_state:
+      - lvgl.widget.update:
+          id: btn_hall
+          state:
+            checked: !lambda return x;
+      - lvgl.label.update:
+          id: lbl_hall
+          text_color: !lambda if (x) return id(bg_blue); return id(white);
+
+script:
+  - id: nav_set
+    parameters:
+      page: int
+    then:
+      - lvgl.widget.update:
+          id: nav_home
+          state:
+            checked: !lambda return page == 0;
+      - lvgl.label.update:
+          id: nav_home_icon
+          text_color: !lambda if (page == 0) return id(bg_blue); return id(white);
+      - lvgl.widget.update:
+          id: nav_climate
+          state:
+            checked: !lambda return page == 1;
+      - lvgl.label.update:
+          id: nav_climate_icon
+          text_color: !lambda if (page == 1) return id(bg_blue); return id(white);
+      - lvgl.widget.update:
+          id: nav_energy
+          state:
+            checked: !lambda return page == 2;
+      - lvgl.label.update:
+          id: nav_energy_icon
+          text_color: !lambda if (page == 2) return id(bg_blue); return id(white);
+      - lvgl.widget.update:
+          id: nav_settings
+          state:
+            checked: !lambda return page == 3;
+      - lvgl.label.update:
+          id: nav_settings_icon
+          text_color: !lambda if (page == 3) return id(bg_blue); return id(white);
+
+  - id: go_home
+    then:
+      - lvgl.widget.show: sidebar_obj
+      - lvgl.page.show: home_page
+      - script.execute:
+          id: nav_set
+          page: 0
+
+  - id: go_climate
+    then:
+      - lvgl.widget.show: sidebar_obj
+      - lvgl.page.show: climate_page
+      - script.execute:
+          id: nav_set
+          page: 1
+
+  - id: go_energy
+    then:
+      - lvgl.widget.show: sidebar_obj
+      - lvgl.page.show: energy_page
+      - script.execute:
+          id: nav_set
+          page: 2
+
+  - id: go_settings
+    then:
+      - lvgl.widget.show: sidebar_obj
+      - lvgl.page.show: settings_page
+      - script.execute:
+          id: nav_set
+          page: 3
+
+  - id: go_media
+    then:
+      - lvgl.widget.hide: sidebar_obj
+      - lvgl.page.show: media_page
+      - script.execute:
+          id: nav_set
+          page: 4
+
+  - id: go_weather
+    then:
+      - lvgl.widget.show: sidebar_obj
+      - lvgl.page.show: weather_page
+      - script.execute:
+          id: nav_set
+          page: 5
+
+  - id: all_lights_off
+    then:
+      - homeassistant.action:
+          action: light.turn_off
+          data:
+            entity_id: ${all_lights_off}
+
+  - id: goto_page
+    parameters:
+      page: int
+    then:
+      - light.turn_on:
+          id: backlight
+          brightness: 100%
+      - lvgl.resume:
+      - if:
+          condition:
+            lambda: return page == 0;
+          then:
+            - script.execute: go_home
+      - if:
+          condition:
+            lambda: return page == 1;
+          then:
+            - script.execute: go_climate
+      - if:
+          condition:
+            lambda: return page == 2;
+          then:
+            - script.execute: go_energy
+      - if:
+          condition:
+            lambda: return page == 3;
+          then:
+            - script.execute: go_settings
+      - if:
+          condition:
+            lambda: return page == 4;
+          then:
+            - script.execute: go_media
+      - if:
+          condition:
+            lambda: return page == 5;
+          then:
+            - script.execute: go_weather
+
+  - id: boot_seq
+    then:
+      - delay: 1s
+      - lvgl.widget.hide: sidebar_obj
+      - delay: 4s
+      - script.execute: go_home
+
+  - id: screen_saver
+    mode: restart
+    then:
+      - light.turn_on:
+          id: backlight
+          brightness: 1.0
+          transition_length: 300ms
+      - delay: 3min
+      - light.turn_on:
+          id: backlight
+          brightness: 0.25
+          transition_length: 2s
+      - delay: 1min
+      - light.turn_off:
+          id: backlight
+          transition_length: 2s
+
+  - id: sync_media
+    mode: single
+    then:
+      - homeassistant.action:
+          action: script.cyd_media_sync
+          data:
+            media_entity: !lambda return id(g_media);
+          capture_response: true
+          on_success:
+            - lambda: |-
+                JsonObjectConst resp = response["response"].isNull() ? response : response["response"].as<JsonObjectConst>();
+                if (resp["devices"].isNull() && !resp["service_response"].isNull())
+                  resp = resp["service_response"].as<JsonObjectConst>();
+                static bool logged = false;
+                if (!logged) {
+                  logged = true;
+                  std::string ks;
+                  for (JsonPairConst kv : resp) {
+                    ks += kv.key().c_str();
+                    ks += " ";
+                  }
+                  ESP_LOGW("cyd_media", "resp keys: %s", ks.c_str());
+                }
+                JsonArrayConst devs = resp["devices"].as<JsonArrayConst>();
+                std::string did[8], dnm[8];
+                int n = 0;
+                for (JsonVariantConst v : devs) {
+                  if (n >= 8) break;
+                  JsonObjectConst d = v.as<JsonObjectConst>();
+                  did[n] = d["e"] | "";
+                  dnm[n] = d["n"] | "";
+                  n++;
+                }
+                id(g_d1) = did[0]; id(g_d2) = did[1]; id(g_d3) = did[2]; id(g_d4) = did[3]; id(g_d5) = did[4]; id(g_d6) = did[5]; id(g_d7) = did[6]; id(g_d8) = did[7];
+                id(g_d1n) = dnm[0]; id(g_d2n) = dnm[1]; id(g_d3n) = dnm[2]; id(g_d4n) = dnm[3]; id(g_d5n) = dnm[4]; id(g_d6n) = dnm[5]; id(g_d7n) = dnm[6]; id(g_d8n) = dnm[7];
+                bool found = false;
+                for (int i = 0; i < n; i++)
+                  if (id(g_media) == did[i]) found = true;
+                if (!found && n > 0) id(g_media) = did[0];
+                lv_obj_t *btns[8] = {id(dev1_btn), id(dev2_btn), id(dev3_btn), id(dev4_btn), id(dev5_btn), id(dev6_btn), id(dev7_btn), id(dev8_btn)};
+                lv_obj_t *lbls[8] = {id(dev1_name), id(dev2_name), id(dev3_name), id(dev4_name), id(dev5_name), id(dev6_name), id(dev7_name), id(dev8_name)};
+                for (int i = 0; i < 8; i++) {
+                  if (i < n) {
+                    lv_obj_clear_flag(btns[i], LV_OBJ_FLAG_HIDDEN);
+                    lv_label_set_text(lbls[i], dnm[i].c_str());
+                    if (id(g_media) == did[i]) lv_obj_add_state(btns[i], LV_STATE_CHECKED);
+                    else lv_obj_clear_state(btns[i], LV_STATE_CHECKED);
+                  } else {
+                    lv_obj_add_flag(btns[i], LV_OBJ_FLAG_HIDDEN);
+                    lv_obj_clear_state(btns[i], LV_STATE_CHECKED);
+                  }
+                }
+                JsonObjectConst now = resp["now"].as<JsonObjectConst>();
+                id(g_st) = now["state"] | "off";
+                id(g_ti) = now["title"] | "";
+                id(g_ar) = now["artist"] | "";
+                id(g_fav) = resp["fav"] | "";
+                JsonArrayConst pls = resp["playlists"].as<JsonArrayConst>();
+                JsonArrayConst urs = resp["uris"].as<JsonArrayConst>();
+                std::string pn[6], pu[6];
+                int i2 = 0;
+                for (JsonVariantConst v : pls) {
+                  if (i2 >= 6) break;
+                  pn[i2] = v | "";
+                  i2++;
+                }
+                i2 = 0;
+                for (JsonVariantConst v : urs) {
+                  if (i2 >= 6) break;
+                  pu[i2] = v | "";
+                  i2++;
+                }
+                id(g_pl1) = pn[0]; id(g_pl2) = pn[1]; id(g_pl3) = pn[2]; id(g_pl4) = pn[3]; id(g_pl5) = pn[4]; id(g_pl6) = pn[5];
+                id(g_u1) = pu[0]; id(g_u2) = pu[1]; id(g_u3) = pu[2]; id(g_u4) = pu[3]; id(g_u5) = pu[4]; id(g_u6) = pu[5];
+                auto as_bool = [](JsonVariantConst v, bool def) -> bool {
+                  if (v.is<bool>()) return v.as<bool>();
+                  if (v.is<int>()) return v.as<int>() != 0;
+                  if (v.is<const char *>()) {
+                    std::string s = v.as<const char *>();
+                    return s == "True" || s == "true" || s == "1";
+                  }
+                  return def;
+                };
+                bool wx = as_bool(resp["wx"], true);
+                bool ot = as_bool(resp["ot"], true);
+                bool cl = as_bool(resp["cl"], true);
+                lv_obj_t *wxobjs[3] = {id(display_weather_icon), id(display_weather_text), id(wx_tap)};
+                for (int i = 0; i < 3; i++) {
+                  if (wx) lv_obj_clear_flag(wxobjs[i], LV_OBJ_FLAG_HIDDEN);
+                  else lv_obj_add_flag(wxobjs[i], LV_OBJ_FLAG_HIDDEN);
+                }
+                bool show_ot = wx && ot;
+                lv_obj_t *otobjs[2] = {id(display_out_temp_icon), id(display_out_temp)};
+                for (int i = 0; i < 2; i++) {
+                  if (show_ot) lv_obj_clear_flag(otobjs[i], LV_OBJ_FLAG_HIDDEN);
+                  else lv_obj_add_flag(otobjs[i], LV_OBJ_FLAG_HIDDEN);
+                }
+                lv_obj_t *itobjs[2] = {id(display_in_temp_icon), id(display_in_temp)};
+                for (int i = 0; i < 2; i++) {
+                  if (cl) lv_obj_clear_flag(itobjs[i], LV_OBJ_FLAG_HIDDEN);
+                  else lv_obj_add_flag(itobjs[i], LV_OBJ_FLAG_HIDDEN);
+                }
+                lv_obj_set_style_translate_x(id(display_in_temp_icon), show_ot ? 6 : -14, LV_PART_MAIN);
+                lv_obj_set_style_translate_x(id(display_in_temp), show_ot ? 28 : 8, LV_PART_MAIN);
+                if (n > 0) lv_obj_clear_flag(id(np_card), LV_OBJ_FLAG_HIDDEN);
+                else lv_obj_add_flag(id(np_card), LV_OBJ_FLAG_HIDDEN);
+                if (id(g_fav).empty() || id(g_fav) == "unknown" || id(g_fav) == "None")
+                  lv_obj_add_flag(id(mfav), LV_OBJ_FLAG_HIDDEN);
+                else lv_obj_clear_flag(id(mfav), LV_OBJ_FLAG_HIDDEN);
+                ESP_LOGW("cyd_media", "sync n=%d media=%s st=%s ti=%s", n, id(g_media).c_str(), id(g_st).c_str(), id(g_ti).c_str());
+            - script.execute: update_media
+            - script.execute: update_playlists
+          on_error:
+            - lambda: |-
+                ESP_LOGW("cyd_media", "sync failed: %s", error.c_str());
+
+  - id: update_media
+    then:
+      - lvgl.label.update:
+          id: np_title
+          text: !lambda |-
+            std::string s = id(g_st);
+            if (s != "playing" && s != "paused") return {"Nothing playing"};
+            std::string t = id(g_ti);
+            if (t.empty() || t == "unknown" || t == "None") t = "Playing";
+            if (t.length() > 140) t = t.substr(0, 137) + "...";
+            std::string a = id(g_ar);
+            if (!a.empty() && a != "unknown" && a != "None") t += "  -  " + a;
+            return {t};
+      - lvgl.label.update:
+          id: np2_title
+          text: !lambda |-
+            std::string s = id(g_st);
+            if (s != "playing" && s != "paused") return {"Nothing playing"};
+            std::string t = id(g_ti);
+            if (t.empty() || t == "unknown" || t == "None") t = "Playing";
+            if (t.length() > 140) t = t.substr(0, 137) + "...";
+            return {t};
+      - lvgl.label.update:
+          id: np2_artist
+          text: !lambda |-
+            std::string s = id(g_st);
+            if (s != "playing" && s != "paused") return {""};
+            std::string a = id(g_ar);
+            if (a.empty() || a == "unknown" || a == "None") return {""};
+            return {a};
+      - lvgl.label.update:
+          id: np2_state
+          text: !lambda |-
+            std::string s = id(g_st);
+            if (s == "playing") return {"Playing"};
+            if (s == "paused") return {"Paused"};
+            if (s == "idle") return {"Idle"};
+            if (s == "off") return {"Off"};
+            return {"--"};
+      - lvgl.label.update:
+          id: mpp_icon
+          text: !lambda |-
+            std::string s = id(g_st);
+            if (s == "playing") return {"\U000F03E4"};
+            return {"\U000F040A"};
+      - lvgl.widget.update:
+          id: np_icon
+          text_color: !lambda |-
+            std::string s = id(g_st);
+            if (s == "playing") return id(amber);
+            if (s == "paused") return id(yellow);
+            return id(light_blue);
+      - lvgl.widget.update:
+          id: np2_state
+          text_color: !lambda |-
+            std::string s = id(g_st);
+            if (s == "playing") return id(amber);
+            if (s == "paused") return id(yellow);
+            return id(lilac);
+      - lvgl.widget.update:
+          id: dev1_btn
+          state:
+            checked: !lambda return !id(g_d1).empty() && id(g_media) == id(g_d1);
+      - lvgl.widget.update:
+          id: dev2_btn
+          state:
+            checked: !lambda return !id(g_d2).empty() && id(g_media) == id(g_d2);
+      - lvgl.widget.update:
+          id: dev3_btn
+          state:
+            checked: !lambda return !id(g_d3).empty() && id(g_media) == id(g_d3);
+      - lvgl.widget.update:
+          id: dev4_btn
+          state:
+            checked: !lambda return !id(g_d4).empty() && id(g_media) == id(g_d4);
+      - lvgl.widget.update:
+          id: dev5_btn
+          state:
+            checked: !lambda return !id(g_d5).empty() && id(g_media) == id(g_d5);
+      - lvgl.widget.update:
+          id: dev6_btn
+          state:
+            checked: !lambda return !id(g_d6).empty() && id(g_media) == id(g_d6);
+      - lvgl.widget.update:
+          id: dev7_btn
+          state:
+            checked: !lambda return !id(g_d7).empty() && id(g_media) == id(g_d7);
+      - lvgl.widget.update:
+          id: dev8_btn
+          state:
+            checked: !lambda return !id(g_d8).empty() && id(g_media) == id(g_d8);
+      - lambda: |-
+          lv_obj_t *icons[8] = {id(dev1_icon), id(dev2_icon), id(dev3_icon), id(dev4_icon), id(dev5_icon), id(dev6_icon), id(dev7_icon), id(dev8_icon)};
+          lv_obj_t *names[8] = {id(dev1_name), id(dev2_name), id(dev3_name), id(dev4_name), id(dev5_name), id(dev6_name), id(dev7_name), id(dev8_name)};
+          std::string ids[8] = {id(g_d1), id(g_d2), id(g_d3), id(g_d4), id(g_d5), id(g_d6), id(g_d7), id(g_d8)};
+          for (int i = 0; i < 8; i++) {
+            bool sel = !ids[i].empty() && id(g_media) == ids[i];
+            lv_color_t c = sel ? lv_color_hex(0x0B1F33) : lv_color_hex(0xFFFFFF);
+            lv_obj_set_style_text_color(icons[i], c, LV_PART_MAIN);
+            lv_obj_set_style_text_color(names[i], c, LV_PART_MAIN);
+          }
+
+  - id: update_playlists
+    then:
+      - lambda: |-
+          lv_obj_t *btns[6] = {id(pl1_btn), id(pl2_btn), id(pl3_btn), id(pl4_btn), id(pl5_btn), id(pl6_btn)};
+          std::string names[6] = {id(g_pl1), id(g_pl2), id(g_pl3), id(g_pl4), id(g_pl5), id(g_pl6)};
+          bool any = false;
+          for (int i = 0; i < 6; i++) {
+            if (names[i].empty() || names[i] == "unknown" || names[i] == "None")
+              lv_obj_add_flag(btns[i], LV_OBJ_FLAG_HIDDEN);
+            else {
+              lv_obj_clear_flag(btns[i], LV_OBJ_FLAG_HIDDEN);
+              any = true;
+            }
+          }
+          if (any) lv_obj_clear_flag(id(pl_card), LV_OBJ_FLAG_HIDDEN);
+          else lv_obj_add_flag(id(pl_card), LV_OBJ_FLAG_HIDDEN);
+      - lvgl.label.update:
+          id: pl1_label
+          text: !lambda |-
+            std::string p = id(g_pl1);
+            if (p.empty() || p == "unknown" || p == "None") return {"No playlists"};
+            if (p.length() > 30) p = p.substr(0, 28) + "..";
+            return {p};
+      - lvgl.label.update:
+          id: pl2_label
+          text: !lambda |-
+            std::string p = id(g_pl2);
+            if (p.empty() || p == "unknown" || p == "None") return {""};
+            if (p.length() > 30) p = p.substr(0, 28) + "..";
+            return {p};
+      - lvgl.label.update:
+          id: pl3_label
+          text: !lambda |-
+            std::string p = id(g_pl3);
+            if (p.empty() || p == "unknown" || p == "None") return {""};
+            if (p.length() > 30) p = p.substr(0, 28) + "..";
+            return {p};
+      - lvgl.label.update:
+          id: pl4_label
+          text: !lambda |-
+            std::string p = id(g_pl4);
+            if (p.empty() || p == "unknown" || p == "None") return {""};
+            if (p.length() > 30) p = p.substr(0, 28) + "..";
+            return {p};
+      - lvgl.label.update:
+          id: pl5_label
+          text: !lambda |-
+            std::string p = id(g_pl5);
+            if (p.empty() || p == "unknown" || p == "None") return {""};
+            if (p.length() > 30) p = p.substr(0, 28) + "..";
+            return {p};
+      - lvgl.label.update:
+          id: pl6_label
+          text: !lambda |-
+            std::string p = id(g_pl6);
+            if (p.empty() || p == "unknown" || p == "None") return {""};
+            if (p.length() > 30) p = p.substr(0, 28) + "..";
+            return {p};
+
+  - id: update_temps
+    then:
+      - lvgl.label.update:
+          id: display_out_temp
+          text: !lambda |-
+            float v = id(g_out_t);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f", v);
+            return {b};
+      - lvgl.label.update:
+          id: display_in_temp
+          text: !lambda |-
+            float v = id(g_ds_act);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f", v);
+            return {b};
+      - lvgl.label.update:
+          id: ds_actual_temp
+          text: !lambda |-
+            float v = id(g_ds_act);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f", v);
+            return {b};
+      - lvgl.label.update:
+          id: ds_setpoint
+          text: !lambda |-
+            float v = id(g_ds_set);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f", v);
+            return {b};
+      - lvgl.label.update:
+          id: us_actual_temp
+          text: !lambda |-
+            float v = id(g_us_act);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f", v);
+            return {b};
+      - lvgl.label.update:
+          id: us_setpoint
+          text: !lambda |-
+            float v = id(g_us_set);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f", v);
+            return {b};
+
+  - id: update_weather_temps
+    then:
+      - lvgl.label.update:
+          id: wx_hi1
+          text: !lambda |-
+            float v = id(g_w1h);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f°", v);
+            return {b};
+      - lvgl.label.update:
+          id: wx_lo1
+          text: !lambda |-
+            float v = id(g_w1l);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f°", v);
+            return {b};
+      - lvgl.label.update:
+          id: wx_hi2
+          text: !lambda |-
+            float v = id(g_w2h);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f°", v);
+            return {b};
+      - lvgl.label.update:
+          id: wx_lo2
+          text: !lambda |-
+            float v = id(g_w2l);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f°", v);
+            return {b};
+      - lvgl.label.update:
+          id: wx_hi3
+          text: !lambda |-
+            float v = id(g_w3h);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f°", v);
+            return {b};
+      - lvgl.label.update:
+          id: wx_lo3
+          text: !lambda |-
+            float v = id(g_w3l);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f°", v);
+            return {b};
+      - lvgl.label.update:
+          id: wx_hi4
+          text: !lambda |-
+            float v = id(g_w4h);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f°", v);
+            return {b};
+      - lvgl.label.update:
+          id: wx_lo4
+          text: !lambda |-
+            float v = id(g_w4l);
+            if (isnan(v)) return {"--"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[16];
+            snprintf(b, sizeof(b), "%.0f°", v);
+            return {b};
+
+  - id: update_unit_ui
+    then:
+      - lvgl.widget.update:
+          id: unit_f
+          state:
+            checked: !lambda return id(g_unit) == "F";
+      - lvgl.widget.update:
+          id: unit_c
+          state:
+            checked: !lambda return id(g_unit) == "C";
+      - script.execute: update_temps
+      - script.execute: update_weather_temps
+
+  - id: weather_update
+    then:
+      - lvgl.label.update:
+          id: display_weather_icon
+          text: !lambda |-
+            std::string s = id(weather_forecast).state;
+            if (s == "clear-night") return {"\U000F0594"};
+            if (s == "cloudy") return {"\U000F0590"};
+            if (s == "exceptional") return {"\U000F0F37"};
+            if (s == "fog") return {"\U000F0591"};
+            if (s == "hail") return {"\U000F0592"};
+            if (s == "lightning") return {"\U000F0593"};
+            if (s == "lightning-rainy") return {"\U000F067E"};
+            if (s == "partlycloudy") return {"\U000F0595"};
+            if (s == "pouring") return {"\U000F0596"};
+            if (s == "rainy") return {"\U000F0597"};
+            if (s == "snowy") return {"\U000F0598"};
+            if (s == "snowy-rainy") return {"\U000F067F"};
+            if (s == "sunny") return {"\U000F0599"};
+            if (s == "windy") return {"\U000F059D"};
+            if (s == "windy-variant") return {"\U000F059E"};
+            return {"\U000F0590"};
+      - lvgl.label.update:
+          id: display_weather_icon
+          text_color: !lambda |-
+            std::string s = id(weather_forecast).state;
+            if (s == "sunny") return id(amber);
+            if (s == "clear-night") return id(light_blue);
+            if (s == "rainy" || s == "pouring" || s == "lightning-rainy") return id(light_blue);
+            if (s == "lightning") return id(yellow);
+            if (s == "snowy" || s == "snowy-rainy" || s == "hail") return id(white);
+            return id(white);
+      - lvgl.label.update:
+          id: display_weather_text
+          text: !lambda |-
+            std::string s = id(weather_forecast).state;
+            if (s == "clear-night") return {"Clear"};
+            if (s == "cloudy") return {"Cloudy"};
+            if (s == "exceptional") return {"Alert"};
+            if (s == "fog") return {"Fog"};
+            if (s == "hail") return {"Hail"};
+            if (s == "lightning") return {"Storm"};
+            if (s == "lightning-rainy") return {"Storms"};
+            if (s == "partlycloudy") return {"Partly Cloudy"};
+            if (s == "pouring") return {"Heavy Rain"};
+            if (s == "rainy") return {"Rain"};
+            if (s == "snowy") return {"Snow"};
+            if (s == "snowy-rainy") return {"Sleet"};
+            if (s == "sunny") return {"Sunny"};
+            if (s == "windy") return {"Windy"};
+            if (s == "windy-variant") return {"Windy"};
+            return {"--"};
+
+  - id: time_update
+    then:
+      - lvgl.label.update:
+          id: display_time
+          text: !lambda |-
+            char str[20];
+            time_t currTime = id(sntp_time).now().timestamp;
+            strftime(str, sizeof(str), "%H:%M", localtime(&currTime));
+            return { str };
+      - lvgl.label.update:
+          id: display_day
+          text: !lambda |-
+            static const char * const days_en[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+            static char date_buf[32];
+            auto now = id(sntp_time).now();
+            snprintf(date_buf, sizeof(date_buf), "%s", days_en[now.day_of_week - 1]);
+            return date_buf;
+      - lvgl.label.update:
+          id: display_date
+          text: !lambda |-
+            static const char * const mon_en[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+            static char month_buf[32];
+            auto now = id(sntp_time).now();
+            snprintf(month_buf, sizeof(month_buf), "%s %d", mon_en[now.month - 1], now.day_of_month);
+            return month_buf;
 
 font:
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
+  - file:
+      type: gfonts
+      family: Roboto
+      weight: 400
     id: my_font8
     size: 8
-    bpp: 4
-#    glyphs:
-#      '${font_glyphs}'
+    bpp: 8
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
-    id: my_font12
-    size: 12
-    bpp: 4
-#    glyphs:
-#      '${font_glyphs}'
-
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
-    id: my_font14
-    size: 14
-    bpp: 4
-#    glyphs:
-#      '${font_glyphs}'
-
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
+  - file:
+      type: gfonts
+      family: Roboto
+      weight: 400
     id: my_font10
     size: 10
-    bpp: 4
-#    glyphs:
-#      '${font_glyphs}'
+    bpp: 8
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
+  - file:
+      type: gfonts
+      family: Roboto
+      weight: 400
+    id: my_font12
+    size: 12
+    bpp: 8
+
+  - file:
+      type: gfonts
+      family: Roboto
+      weight: 500
+    id: my_font14
+    size: 14
+    bpp: 8
+
+  - file:
+      type: gfonts
+      family: Roboto
+      weight: 700
     id: my_font22
     size: 22
-    bpp: 4
-#    glyphs:
-#      '${font_glyphs}'
+    bpp: 8
 
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
-    id: temp_font14
-    size: 14
-    bpp: 4
-#    glyphs:
-#      '${font_glyphs}'
-
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
-    id: weather_font12
-    size: 12
-    bpp: 4
-#    glyphs:
-#      '${font_glyphs}'
-
-  - file: "https://github.com/JMiahMan1/esphome-waveshare7/raw/refs/heads/main/Fonts/creato-display/CreatoDisplay-ExtraBold.ttf"
-    id: clock_font16
-    size: 16
-#    glyphs:
-#      '${font_glyphs}'
+  - file:
+      type: gfonts
+      family: Roboto
+      weight: 700
+    id: clock_font28
+    size: 28
+    bpp: 8
 
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
-    id: icon_font_60
-    size: 60
-    bpp: 4
+    id: icon_font_40
+    size: 40
+    bpp: 8
     glyphs: &icon_glyphs
-      - "\U000F0590" # mdi-weather-cloudy
-      - "\U000F0F2F" # mdi-weather-cloudy-alert
-      - "\U000F0E6E" # mdi-weather-cloudy-arrow-right
-      - "\U000F0591" # mdi-weather-fog
-      - "\U000F0592" # mdi-weather-hail
-      - "\U000F0F30" # mdi-weather-hazy
-      - "\U000F0898" # mdi-weather-hurricane
-      - "\U000F0593" # mdi-weather-lightning
-      - "\U000F067E" # mdi-weather-lightning-rainy
-      - "\U000F0594" # mdi-weather-night
-      - "\U000F0F31" # mdi-weather-night-partly-cloudy
-      - "\U000F0595" # mdi-weather-partly-cloudy
-      - "\U000F0F32" # mdi-weather-partly-lightning
-      - "\U000F0F33" # mdi-weather-partly-rainy
-      - "\U000F0F34" # mdi-weather-partly-snowy
-      - "\U000F0F35" # mdi-weather-partly-snowy-rainy
-      - "\U000F0596" # mdi-weather-pouring
-      - "\U000F0597" # mdi-weather-rainy
-      - "\U000F0598" # mdi-weather-snowy
-      - "\U000F0F36" # mdi-weather-snowy-heavy
-      - "\U000F067F" # mdi-weather-snowy-rainy
-      - "\U000F0599" # mdi-weather-sunny
-      - "\U000F0F37" # mdi-weather-sunny-alert
-      - "\U000F14E4" # mdi-weather-sunny-off
-      - "\U000F059A" # mdi-weather-sunset
-      - "\U000F059B" # mdi-weather-sunset-down
-      - "\U000F059C" # mdi-weather-sunset-up
-      - "\U000F0F38" # mdi-weather-tornado
-      - "\U000F059D" # mdi-weather-windy
-      - "\U000F059E" # mdi-weather-windy-variant
-      - "\U000F0A19" #toggle off
-      - "\U000F0521" #toggle on
-      - "\U000F0150" #clock
-      - "\U000F057E" #speaker on
-      - "\U000F0581" #speaker off
-      - "\U000F1322" #tools
-      - "\U000F12D4" #garage open
-      - "\U000F12D3" #garage closed
-#      - "\U000F0238" #heating
-      - "\U000F0B2C" #up
-      - "\U000F0B26" #down
-      - "\U000F1A12" #home button
-      - "\U000F0D90" #monitor_off
-      - "\U000F0B28" #left
-      - "\U000F192D" #electricity
-      - "\U000F1A1B" #gas
-      - "\U000F0B2A" #right
-      - "\U000F04B9" #living room
-      - "\U000F1061" #dining
-      - "\U000F06B5" #lamp
-      - "\U000F06E8" #light bulb illuminated
-      - "\U000F0335" #light bulb off
-      - "\U000F07F4" #tv
-      - "\U000F1160" #kitchen
-      - "\U000F0210" #fan
-      - "\U000F050F" #temp
-      - "\U000F1747" #tall lamp
-      - "\U000F0769" #ceiling
-      - "\U000F18DD" #ceiling multiple
-      - "\U000F091C" #wall light
-      - "\U000F075A" #music
-      - "\U000F05CB" #voice
-      - "\U000F0ED4" #voice off
-      - "\U000F0FCE" #scene
-      - "\U000F040A" #play
-      - "\U000F03E4" #pause
-      - "\U000F04DB" #stop
-      - "\U000F04AD" #next track
-      - "\U000F04AE" #previous track
-      - "\U000F075E" #vol minus
-      - "\U000F075D" #vol plus
-      - "\U000F040E" #play/pause
-      - "\U000F08D6" #settings
-      - "\U000F036D" #microphone off
-      - "\U000F032A" #energy leaf
+      - "\U000F0590"
+      - "\U000F0F2F"
+      - "\U000F0E6E"
+      - "\U000F0591"
+      - "\U000F0592"
+      - "\U000F0F30"
+      - "\U000F0898"
+      - "\U000F0593"
+      - "\U000F067E"
+      - "\U000F0594"
+      - "\U000F0F31"
+      - "\U000F0595"
+      - "\U000F0F32"
+      - "\U000F0F33"
+      - "\U000F0F34"
+      - "\U000F0F35"
+      - "\U000F0596"
+      - "\U000F0597"
+      - "\U000F0598"
+      - "\U000F0F36"
+      - "\U000F067F"
+      - "\U000F0599"
+      - "\U000F0F37"
+      - "\U000F14E4"
+      - "\U000F059A"
+      - "\U000F059B"
+      - "\U000F059C"
+      - "\U000F0F38"
+      - "\U000F059D"
+      - "\U000F059E"
+      - "\U000F02DC"
+      - "\U000F0493"
+      - "\U000F140B"
+      - "\U000F0393"
+      - "\U000F0335"
+      - "\U000F181C"
+      - "\U000F08DD"
+      - "\U000F06B5"
+      - "\U000F091C"
+      - "\U000F09A0"
+      - "\U000F0425"
+      - "\U000F12D3"
+      - "\U000F12D4"
+      - "\U000F050F"
+      - "\U000F0F54"
+      - "\U000F032A"
+      - "\U000F1A57"
+      - "\U000F0128"
+      - "\U000F0E17"
+      - "\U000F01C1"
+      - "\U000F0374"
+      - "\U000F0415"
+      - "\U000F0238"
+      - "\U000F0717"
+      - "\U000F0210"
+      - "\U000F00DF"
+      - "\U000F1051"
+      - "\U000F05A9"
+      - "\U000F075A"
+      - "\U000F040A"
+      - "\U000F03E4"
+      - "\U000F04AD"
+      - "\U000F04AE"
+      - "\U000F0502"
+      - "\U000F040C"
+      - "\U000F02D1"
+      - "\U000F004D"
 
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
     id: icon_font_30
     size: 30
-    bpp: 4
+    bpp: 8
+    glyphs: *icon_glyphs
+
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
+    id: icon_font_24
+    size: 24
+    bpp: 8
     glyphs: *icon_glyphs
 
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
     id: icon_font_20
     size: 20
-    bpp: 4
+    bpp: 8
     glyphs: *icon_glyphs
 
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
     id: icon_font_14
     size: 14
-    bpp: 4
+    bpp: 8
+    glyphs: *icon_glyphs
+
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
+    id: icon_font_12
+    size: 12
+    bpp: 8
     glyphs: *icon_glyphs
 
 color:
-#  - id: green
-#    hex: '75D15F'
   - id: green
     hex: '60A86A'
   - id: red
@@ -860,6 +1555,10 @@ color:
     hex: '085296'
   - id: amber
     hex: 'FBAB35'
+  - id: heat_orange
+    hex: 'D35400'
+  - id: cool_blue
+    hex: '1E6FA8'
   - id: lime
     hex: '20FC30'
   - id: pink
@@ -892,6 +1591,7 @@ color:
     hex: '41220D'
   - id: bg_grey
     hex: '4F4F4F'
+
 lvgl:
   buffer_size: 25%
   displays:
@@ -900,46 +1600,43 @@ lvgl:
     - device_touchscreen
   theme:
     label:
-      text_font: my_font12 # set all your labels to use your custom defined font
+      text_font: my_font14
       text_align: CENTER
-      text_color: 0xffffff
-      align: TOP_MID
+      text_color: 0x3A1533
+      align: CENTER
 
     button:
-      bg_color: bg_purple
+      bg_color: 0xA16793
+      bg_grad_color: 0x8A4F7E
+      bg_grad_dir: VER
       bg_opa: COVER
-      border_color: 0x53334B
+      border_color: 0x9C6091
       border_width: 1
       text_color: white
-      radius: 10
-      shadow_color: 0x063D71
-      shadow_ofs_x: 0
-      shadow_ofs_y: 0
-      shadow_spread: 2
-      shadow_width: 3
-      shadow_opa: 70%
+      radius: 12
+      shadow_color: 0x000000
+      shadow_opa: 30%
+      shadow_width: 8
+      shadow_ofs_y: 2
+      shadow_spread: 0
       checked:
-        bg_color: 0x6A4260
+        bg_color: 0xFBAB35
+        bg_grad_color: 0xE09018
+        bg_grad_dir: VER
         bg_opa: COVER
-        border_color: black
+        border_color: 0xFFD98A
         border_width: 1
-        text_color: yellow
-        radius: 10
-        shadow_color: yellow
-        shadow_ofs_x: 0
-        shadow_ofs_y: 0
-        shadow_spread: 2
-        shadow_width: 3
-        shadow_opa: 70%
+        text_color: 0x0B1F33
+        radius: 12
 
     switch:
-      bg_color: 0xC0C0C0
-      bg_grad_color: 0xb0b0b0
+      bg_color: 0xC9BBD1
+      bg_grad_color: 0xB5A6C0
       bg_grad_dir: VER
       bg_opa: COVER
       checked:
-        bg_color: 0x1d5f96
-        bg_grad_color: 0x03324A
+        bg_color: 0xFBAB35
+        bg_grad_color: 0xE09018
         bg_grad_dir: VER
         bg_opa: COVER
       knob:
@@ -947,508 +1644,2135 @@ lvgl:
         bg_grad_color: 0xC0C0C0
         bg_grad_dir: VER
         bg_opa: COVER
+
     slider:
       border_width: 1
       border_opa: 15%
       bg_color: 0xcccaca
       bg_opa: 15%
       indicator:
-        bg_color: 0x1d5f96
-        bg_grad_color: 0x03324A
+        bg_color: 0xA16793
+        bg_grad_color: 0x8A4F7E
         bg_grad_dir: VER
         bg_opa: COVER
       knob:
-        bg_color: 0x2F8CD8
-        bg_grad_color: 0x005782
+        bg_color: 0xFFFFFF
+        bg_grad_color: 0xF0EAF3
         bg_grad_dir: VER
         bg_opa: COVER
-        border_color: 0x0077b3
+        border_color: 0x8A5578
         border_width: 1
         text_color: 0xFFFFFF
 
   style_definitions:
-    - id: main_content
-      bg_color: 0xD6BED0
-      text_color: 0xFFFFFF
-      width: 68%
-      height: 70%
-      align: TOP_RIGHT
+    - id: nav_bar
+      bg_opa: TRANSP
       border_width: 0
-      radius: 0
+      pad_all: 0
 
-    - id: bottom_content_left
-      bg_color: 0xD6BED0
-      text_color: bg_purple
-      text_align: LEFT
-      align: BOTTOM_LEFT
-      width: 34%
-      height: 30%
-      translate_x: 100
-      border_side: TOP
-      border_width: 2
-      border_color: 0x53334B
-      radius: 0
-
-    - id: bottom_content_right
-      bg_color: 0xD6BED0
-      text_color: bg_purple
-      text_align: LEFT
-      align: BOTTOM_LEFT
-      width: 34%
-      height: 30%
-      translate_x: 210
-      border_side: TOP
-      border_width: 2
-      border_color: 0x53334B
-      radius: 0
-
-    - id: left
+    - id: sidebar
       width: 32%
       height: 100%
-      bg_color: bg_purple
+      bg_color: 0x73264D
+      bg_grad_color: 0x032341
+      bg_grad_dir: VER
       border_opa: TRANSP
-      align: TOP_LEFT
       radius: 0
+      pad_all: 0
       text_align: CENTER
-      text_color: 0xffffff
+      text_color: white
+
+    - id: content
+      width: 68%
+      height: 100%
+      bg_color: 0xEFE7F3
+      bg_grad_color: 0xE2D5EA
+      bg_grad_dir: VER
+      border_width: 0
+      radius: 0
+      pad_all: 0
+      text_color: 0x3A1533
+      align: TOP_RIGHT
+
+    - id: card
+      bg_color: 0xFFFFFF
+      bg_opa: COVER
+      border_color: 0xE3D6E9
+      border_width: 1
+      radius: 14
+      pad_all: 0
+      shadow_color: 0x000000
+      shadow_ofs_x: 0
+      shadow_ofs_y: 3
+      shadow_spread: 0
+      shadow_width: 10
+      shadow_opa: 25%
+      text_color: 0x3A1533
+
+    - id: hero
+      bg_color: 0x7B2D5E
+      bg_grad_color: 0x4A1F45
+      bg_grad_dir: VER
+      border_color: 0x9C6091
+      border_width: 1
+      radius: 14
+      pad_all: 0
+      shadow_color: 0x000000
+      shadow_ofs_x: 0
+      shadow_ofs_y: 3
+      shadow_spread: 0
+      shadow_width: 10
+      shadow_opa: 25%
+      text_color: 0xFFFFFF
+
+    - id: txt_purple
+      text_color: 0x4A1F45
+
+    - id: tile
+      bg_color: 0xAE6FA0
+      bg_grad_color: 0x8A4F7E
+      bg_grad_dir: VER
+      bg_opa: COVER
+      border_color: 0x9C6091
+      border_width: 1
+      radius: 12
+      pad_all: 0
+      text_color: white
+
+    - id: boot_bg
+      width: 100%
+      height: 100%
+      bg_color: 0x73264D
+      bg_grad_color: 0x032341
+      bg_grad_dir: VER
+      border_width: 0
+      radius: 0
+      pad_all: 0
+      text_color: white
+
+    - id: power_btn
+      bg_color: 0xB0443F
+      bg_grad_color: 0x8E2B27
+      bg_grad_dir: VER
+      bg_opa: COVER
+      border_color: 0xC97A76
+      border_width: 1
+      radius: 19
+      pad_all: 0
+      text_color: white
+      shadow_color: 0x000000
+      shadow_ofs_x: 0
+      shadow_ofs_y: 2
+      shadow_spread: 0
+      shadow_width: 8
+      shadow_opa: 30%
+
+    - id: circle_btn
+      bg_color: 0xAE6FA0
+      bg_grad_color: 0x8A4F7E
+      bg_grad_dir: VER
+      bg_opa: COVER
+      border_color: 0x9C6091
+      border_width: 1
+      radius: 19
+      pad_all: 0
+      text_color: white
+      shadow_color: 0x000000
+      shadow_ofs_x: 0
+      shadow_ofs_y: 2
+      shadow_spread: 0
+      shadow_width: 8
+      shadow_opa: 30%
+
+    - id: play_btn
+      bg_color: 0xFBAB35
+      bg_grad_color: 0xE09018
+      bg_grad_dir: VER
+      bg_opa: COVER
+      border_color: 0xFFD98A
+      border_width: 1
+      radius: 21
+      pad_all: 0
+      text_color: 0x0B1F33
+      shadow_color: 0x000000
+      shadow_ofs_x: 0
+      shadow_ofs_y: 2
+      shadow_spread: 0
+      shadow_width: 8
+      shadow_opa: 30%
+
+    - id: list_row
+      bg_color: 0xF3EBF7
+      bg_grad_color: 0xF3EBF7
+      bg_grad_dir: NONE
+      bg_opa: COVER
+      border_color: 0xE0D2E8
+      border_width: 1
+      radius: 8
+      pad_all: 0
+      text_color: 0x3A1533
+
+    - id: glass_btn
+      bg_color: 0xFFFFFF
+      bg_opa: 15%
+      border_color: 0xFFFFFF
+      border_opa: 35%
+      border_width: 1
+      radius: 19
+      pad_all: 0
+      text_color: white
+      shadow_width: 0
 
   top_layer:
-      widgets:
-        - obj:
-            styles: left
-            widgets:
-              - label:
-                  id: display_time
-                  text_font: clock_font16
-                  text: "23:59"
-              - label:
-                  id: display_day
-                  text_font: weather_font12
-                  text: "Sunday"
-                  translate_y: 20
-              - label:
-                  id: display_date
-                  text_font: weather_font12
-                  text: "01 June"
-                  translate_y: 30
-
-              - label:
-
-                  id: display_weather
-                  translate_y: 50
-                  text_font: icon_font_30
-                  text: "\U000F0590"
-
-              - label:
-                  id: display_weather_label
-                  text: " "
-                  translate_y: 60
-
-              - label:
-                  id: display_out_temp
-                  text_font: temp_font14
-                  text: " "
-                  translate_y: 120
-                  translate_x: 5
-
-              - label:
-                  id: display_out_temp_icon
-                  text_font: icon_font_14
-                  text: "\U000F050F"
-                  translate_y: 120
-                  translate_x: -40
-
-              - label:
-                  id: real_feel_temp_lvgl
-                  text_font: temp_font14
-                  text: " "
-                  translate_y: 140
-                  translate_x: 5
-
-              - label:
-                  id: display_real_feel_temp_icon
-                  text_font: icon_font_14
-                  text: "\U000F050F"
-                  translate_y: 140
-                  translate_x: -40
-
-              - label:
-                  id: display_out_high_temp
-                  text_font: temp_font14
-                  text: " "
-                  translate_y: 160
-                  translate_x: 5
-
-              - label:
-                  id: display_out_high_temp_icon
-                  text_font: icon_font_14
-                  text: "\U000F050F"
-                  translate_y: 160
-                  translate_x: -40
-
-              - label:
-                  id: display_out_low_temp
-                  text_font: temp_font14
-                  text: " "
-                  translate_y: 180
-                  translate_x: 5
-
-              - label:
-                  id: display_out_low_temp_icon
-                  text_font: icon_font_14
-                  text: "\U000F050F"
-                  translate_y: 180
-                  translate_x: -40
+    widgets:
+      - obj:
+          id: sidebar_obj
+          hidden: true
+          styles: sidebar
+          widgets:
+            - label:
+                id: display_time
+                align: TOP_MID
+                text_outline_stroke_color: 0x2A0E22
+                text_outline_stroke_width: 1
+                text_outline_stroke_opa: COVER
+                text_font: clock_font28
+                text: " "
+                translate_y: 2
+            - label:
+                id: display_day
+                align: TOP_MID
+                text_outline_stroke_color: 0x2A0E22
+                text_outline_stroke_width: 1
+                text_outline_stroke_opa: COVER
+                text_font: my_font12
+                translate_y: 42
+                text: " "
+            - label:
+                id: display_date
+                align: TOP_MID
+                text_outline_stroke_color: 0x2A0E22
+                text_outline_stroke_width: 1
+                text_outline_stroke_opa: COVER
+                text_font: my_font12
+                translate_y: 60
+                text: " "
+            - label:
+                id: display_weather_icon
+                align: TOP_MID
+                text_outline_stroke_color: 0x2A0E22
+                text_outline_stroke_width: 1
+                text_outline_stroke_opa: COVER
+                text_font: icon_font_24
+                text: " "
+                translate_y: 80
+            - label:
+                id: display_weather_text
+                align: TOP_MID
+                text_outline_stroke_color: 0x2A0E22
+                text_outline_stroke_width: 1
+                text_outline_stroke_opa: COVER
+                text_font: my_font12
+                text: " "
+                translate_y: 116
+            - label:
+                id: display_out_temp_icon
+                align: TOP_MID
+                text_outline_stroke_color: 0x2A0E22
+                text_outline_stroke_width: 1
+                text_outline_stroke_opa: COVER
+                text_font: icon_font_14
+                text: "\U000F050F"
+                translate_y: 134
+                translate_x: -40
+            - label:
+                id: display_out_temp
+                align: TOP_MID
+                text_outline_stroke_color: 0x2A0E22
+                text_outline_stroke_width: 1
+                text_outline_stroke_opa: COVER
+                text_font: my_font14
+                text: " "
+                translate_y: 134
+                translate_x: -18
+            - label:
+                id: display_in_temp_icon
+                align: TOP_MID
+                text_outline_stroke_color: 0x2A0E22
+                text_outline_stroke_width: 1
+                text_outline_stroke_opa: COVER
+                text_font: icon_font_14
+                text: "\U000F0F54"
+                translate_y: 134
+                translate_x: 6
+            - label:
+                id: display_in_temp
+                align: TOP_MID
+                text_outline_stroke_color: 0x2A0E22
+                text_outline_stroke_width: 1
+                text_outline_stroke_opa: COVER
+                text_font: my_font14
+                text: " "
+                translate_y: 134
+                translate_x: 28
+            - button:
+                id: wx_tap
+                align: TOP_MID
+                translate_y: 70
+                width: 100%
+                height: 66
+                bg_opa: TRANSP
+                border_width: 0
+                shadow_width: 0
+                on_click:
+                  - script.execute: go_weather
+            - obj:
+                styles: nav_bar
+                align: BOTTOM_MID
+                width: 96%
+                height: 30%
+                layout:
+                  type: GRID
+                  pad_row: 4
+                  pad_column: 4
+                  grid_columns: [FR(1), FR(1)]
+                  grid_rows: [FR(1), FR(1)]
+                widgets:
+                  - button:
+                      id: nav_home
+                      styles: tile
+                      checkable: true
+                      grid_cell_column_pos: 0
+                      grid_cell_row_pos: 0
+                      grid_cell_x_align: STRETCH
+                      grid_cell_y_align: STRETCH
+                      widgets:
+                        - label:
+                            id: nav_home_icon
+                            text_font: icon_font_20
+                            text: "\U000F02DC"
+                      on_click:
+                        - script.execute: go_home
+                  - button:
+                      id: nav_climate
+                      styles: tile
+                      checkable: true
+                      grid_cell_column_pos: 1
+                      grid_cell_row_pos: 0
+                      grid_cell_x_align: STRETCH
+                      grid_cell_y_align: STRETCH
+                      widgets:
+                        - label:
+                            id: nav_climate_icon
+                            text_font: icon_font_20
+                            text: "\U000F0393"
+                      on_click:
+                        - script.execute: go_climate
+                  - button:
+                      id: nav_energy
+                      styles: tile
+                      checkable: true
+                      grid_cell_column_pos: 0
+                      grid_cell_row_pos: 1
+                      grid_cell_x_align: STRETCH
+                      grid_cell_y_align: STRETCH
+                      widgets:
+                        - label:
+                            id: nav_energy_icon
+                            text_font: icon_font_20
+                            text: "\U000F140B"
+                      on_click:
+                        - script.execute: go_energy
+                  - button:
+                      id: nav_settings
+                      styles: tile
+                      checkable: true
+                      grid_cell_column_pos: 1
+                      grid_cell_row_pos: 1
+                      grid_cell_x_align: STRETCH
+                      grid_cell_y_align: STRETCH
+                      widgets:
+                        - label:
+                            id: nav_settings_icon
+                            text_font: icon_font_20
+                            text: "\U000F0493"
+                      on_click:
+                        - script.execute: go_settings
 
   pages:
-    - id: main_page
+    - id: boot_page
       widgets:
         - obj:
-            styles: main_content
-            layout:
-              pad_column: 5
-              pad_row: 5
-              type: GRID
-              grid_columns: [FR(1), FR(1), FR(1), FR(1)]
-              grid_rows: [FR(5), FR(1), FR(5), FR(1)]
-
+            styles: boot_bg
             widgets:
-              - button:
-                  checkable: true
-                  id: button_1
-                  grid_cell_column_pos: 0
-                  grid_cell_row_pos: 0
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  widgets:
-                    - label:
-                        id: dining_light_lvgl
-                        text_font: icon_font_30
-                        text: "\U000F06B5"
-                  on_press:
-                    - homeassistant.action:
-                        action: light.toggle
-                        data:
-                          entity_id: ${living_room_lamp1}
-              - label:
-                  grid_cell_column_pos: 0 # place the widget in
-                  grid_cell_row_pos: 1 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-              - button:
-                  checkable: true
-                  id: button_2
-                  grid_cell_column_pos: 1
-                  grid_cell_row_pos: 0
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  widgets:
-                    - label:
-                        id: big_light_lvgl
-                        text_font: icon_font_30
-                        text: "\U000F0769"
-                  on_click:
-                    - homeassistant.action:
-                        action: light.toggle
-                        data:
-                          entity_id: ${masterbed_lamp_right}
-
-              - label:
-                  grid_cell_column_pos: 1 # place the widget in
-                  grid_cell_row_pos: 1 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-              - button:
-                  checkable: true
-                  id: button_3
-                  grid_cell_column_pos: 2
-                  grid_cell_row_pos: 0
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  widgets:
-                    - label:
-                        id: back_light_lvgl
-                        text_font: icon_font_30
-                        text: "\U000F0769"
-                  on_click:
-                    - homeassistant.action:
-                        action: light.toggle
-                        data:
-                          entity_id: ${masterbed_lamp_left}
-              - label:
-                  grid_cell_column_pos: 2 # place the widget in
-                  grid_cell_row_pos: 1 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-              - button:
-                  checkable: true
-                  id: button_4
-                  grid_cell_column_pos: 3
-                  grid_cell_row_pos: 0
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  widgets:
-                    - label:
-                        id: living_room_lvgl
-                        text_font: icon_font_30
-                        text: "\U000F04B9"
-                  on_click:
-                    - homeassistant.action:
-                        action: switch.toggle
-                        data:
-                          entity_id: switch.living_room
-
-              - label:
-                  grid_cell_column_pos: 3 # place the widget in
-                  grid_cell_row_pos: 1 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-
-
-## second row ##
-
-              - button:
-                  checkable: false
-                  id: button_7
-                  grid_cell_column_pos: 0
-                  grid_cell_row_pos: 2
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  pressed:
-                    bg_color: blue
-                  widgets:
-                    - label:
-                        id: heating_down_lvgl
-                        text_font: icon_font_30
-                        text: "\U000F0B26"
-                  on_press:
-                    then:
-                      - homeassistant.service:
-                          service: climate.set_temperature
-                          data:
-                            temperature: !lambda "return id(set_temp).state - 1;"
-                            entity_id: ${us_set_climate_entity}
-
-              - label:
-                  grid_cell_column_pos: 0 # place the widget in
-                  grid_cell_row_pos: 3 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-              - button:
-                  checkable: false
-                  id: button_8
-                  grid_cell_column_pos: 1
-                  grid_cell_row_pos: 2
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  pressed:
-                    bg_color: red
-                  widgets:
-                    - label:
-                        id: set_temp_lvgl
-                        translate_y: 5
-                        text_font: my_font14
-                        text: " "
-                    - label:
-                        id: set_temp_label
-                        translate_y: 20
-                        text: "Thermostat"
-                  on_press:
-                    - if:
-                        condition:
-                          - lambda: return id(set_temp_mode).state == "NoHold";
-                        then:
-                          - lvgl.label.update:
-                              id: set_temp_lvgl
-                              text_color: white
-                          - lvgl.label.update:
-                             id: set_temp_label
-                             text: "Sched"
-                        else:
-                          - homeassistant.action:
-                              action: climate.set_preset_mode
-                              data:
-                                preset_mode: "NoHold"
-                                entity_id: ${us_set_climate_entity}
-                          - lvgl.label.update:
-                              id: set_temp_lvgl
-                              text_color: white
-                          - lvgl.label.update:
-                             id: set_temp_label
-                             text: "Sched"
-
-              - label:
-                  grid_cell_column_pos: 1 # place the widget in
-                  grid_cell_row_pos: 3 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-              - button:
-                  checkable: false
-                  id: button_9
-                  grid_cell_column_pos: 2
-                  grid_cell_row_pos: 2
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  widgets:
-                    - label:
-                        id: us_climate_actual_temp_lvgl
-                        translate_y: 5
-                        text_font: my_font14
-                        text: " "
-                    - label:
-                        id: us_climate_actual_temp_label
-                        translate_y: 20
-                        text: "Actual"
-
-
-              - label:
-                  grid_cell_column_pos: 2 # place the widget in
-                  grid_cell_row_pos: 3 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  text: " "
-                  text_align: CENTER
-
-              - button:
-                  checkable: false
-                  id: button_10
-                  grid_cell_column_pos: 3
-                  grid_cell_row_pos: 2
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
-                  pressed:
-                    bg_color: red
-                  widgets:
-                    - label:
-                        id: climate_up_lvgl
-                        text_font: icon_font_30
-                        text: "\U000F0B2C"
-                  on_press:
-                    then:
-                      - homeassistant.service:
-                          service: climate.set_temperature
-                          data:
-                            temperature: !lambda "return id(set_temp).state + 1;"
-                            entity_id: ${us_set_climate_entity}
-
-              - button:
-                  checkable: false
-                  border_width: 0
-                  bg_color: lilac
-                  shadow_spread: 0
+              - obj:
+                  align: TOP_MID
+                  translate_y: 40
+                  width: 92
+                  height: 92
+                  radius: 46
+                  bg_color: 0xFFFFFF
+                  bg_opa: 10%
+                  border_color: 0xFFFFFF
+                  border_opa: 40%
+                  border_width: 2
                   shadow_width: 0
-                  grid_cell_column_pos: 3 # place the widget in
-                  grid_cell_row_pos: 3 # the corresponding cell
-                  grid_cell_x_align: STRETCH
-                  grid_cell_y_align: STRETCH
+                  pad_all: 0
                   widgets:
                     - label:
-                        id: more_label
-                        translate_y: -8
-                        text_font: my_font8
-                        text_color: bg_purple
-                        text: "More ->"
-                        text_align: CENTER
-                  on_press:
-                    then:
-                      - lvgl.page.next:
-
-
-
+                        text_font: icon_font_40
+                        text_color: 0xFFFFFF
+                        text: "\U000F02DC"
+              - label:
+                  text_font: my_font22
+                  text_color: 0xFFFFFF
+                  text: "JARVIS"
+                  align: TOP_MID
+                  translate_y: 144
+              - label:
+                  text_font: my_font10
+                  text_color: 0xD6BED0
+                  text: "CYD CONTROL PANEL"
+                  align: TOP_MID
+                  translate_y: 174
+              - spinner:
+                  align: TOP_MID
+                  translate_y: 198
+                  width: 26
+                  height: 26
+                  arc_color: 0xFBAB35
+                  arc_width: 3
+                  indicator:
+                    arc_color: 0xFFFFFF
+                    arc_opa: 20%
+    - id: home_page
+      widgets:
         - obj:
-            styles: bottom_content_left
+            styles: content
             widgets:
               - label:
-                  id: display_cur_elec_usage
+                  text_font: icon_font_14
+                  text: "\U000F0335"
+                  styles: txt_purple
                   align: TOP_LEFT
-                  translate_x: 10
-                  translate_y: 5
-                  text_font: my_font12
-                  text_color: white
-                  text: "Current:"
-
-              - label:
-                  id: display_daily_elect_usage
-                  align: TOP_LEFT
-                  translate_x: 10
-                  translate_y: 18
-                  text_font: my_font12
-                  text_color: white
-                  text: "Daily:"
-
-              - label:
-                  id: display_elec_cost
-                  align: TOP_LEFT
-                  translate_x: 10
-                  translate_y: 32
-                  text_font: my_font12
-                  text_color: white
-                  text: "Cost:"
-
-              - label:
-                  id: display_energy_icon
-                  align: TOP_LEFT
-                  translate_x: -10
-                  translate_y: 5
-                  text_color: green
-                  text_font: icon_font_20
-                  text: "\U000F032A"
-
-              - label:
-                  id: display_energy_title
-                  align: CENTER
-                  translate_x: 0
-                  translate_y: -25
-                  text_color: white
-                  text_font: my_font14
-                  text: "Energy Usage"
-        - obj:
-            styles: bottom_content_right
-            widgets:
-              - label:
-                  id: display_garage_icon
-                  align: TOP_LEFT
-                  translate_x: -5
+                  translate_x: 12
                   translate_y: 10
-                  text_color: white
-                  text_font: icon_font_20
-                  text: "\U000F12D3"
-                  on_press:
+              - label:
+                  text: "Lights"
+                  styles: txt_purple
+                  align: TOP_LEFT
+                  translate_x: 30
+                  translate_y: 8
+              - obj:
+                  styles: nav_bar
+                  align: TOP_MID
+                  translate_y: 28
+                  width: 94%
+                  height: 50%
+                  layout:
+                    type: GRID
+                    pad_row: 5
+                    pad_column: 5
+                    grid_columns: [FR(1), FR(1), FR(1)]
+                    grid_rows: [FR(1), FR(1)]
+                  widgets:
+                    - button:
+                        id: btn_kitchen
+                        checkable: true
+                        styles: tile
+                        grid_cell_column_pos: 0
+                        grid_cell_row_pos: 0
+                        grid_cell_x_align: STRETCH
+                        grid_cell_y_align: STRETCH
+                        widgets:
+                          - label:
+                              id: lbl_kitchen
+                              text_font: icon_font_30
+                              text: "\U000F181C"
+                              translate_y: -8
+                          - label:
+                              text_font: my_font10
+                              text: "Kitchen"
+                              translate_y: 20
+                        on_click:
+                          - homeassistant.action:
+                              action: light.toggle
+                              data:
+                                entity_id: ${light_kitchen_all}
+                    - button:
+                        id: btn_master_l
+                        checkable: true
+                        styles: tile
+                        grid_cell_column_pos: 1
+                        grid_cell_row_pos: 0
+                        grid_cell_x_align: STRETCH
+                        grid_cell_y_align: STRETCH
+                        widgets:
+                          - label:
+                              id: lbl_master_l
+                              text_font: icon_font_30
+                              text: "\U000F06B5"
+                              translate_y: -8
+                          - label:
+                              text_font: my_font10
+                              text: "Master L"
+                              translate_y: 20
+                        on_click:
+                          - homeassistant.action:
+                              action: light.toggle
+                              data:
+                                entity_id: ${light_master_left}
+                    - button:
+                        id: btn_master_r
+                        checkable: true
+                        styles: tile
+                        grid_cell_column_pos: 2
+                        grid_cell_row_pos: 0
+                        grid_cell_x_align: STRETCH
+                        grid_cell_y_align: STRETCH
+                        widgets:
+                          - label:
+                              id: lbl_master_r
+                              text_font: icon_font_30
+                              text: "\U000F06B5"
+                              translate_y: -8
+                          - label:
+                              text_font: my_font10
+                              text: "Master R"
+                              translate_y: 20
+                        on_click:
+                          - homeassistant.action:
+                              action: light.toggle
+                              data:
+                                entity_id: ${light_master_right}
+                    - button:
+                        id: btn_hall
+                        checkable: true
+                        styles: tile
+                        grid_cell_column_pos: 0
+                        grid_cell_row_pos: 1
+                        grid_cell_x_align: STRETCH
+                        grid_cell_y_align: STRETCH
+                        widgets:
+                          - label:
+                              id: lbl_hall
+                              text_font: icon_font_30
+                              text: "\U000F091C"
+                              translate_y: -8
+                          - label:
+                              text_font: my_font10
+                              text: "Hall"
+                              translate_y: 20
+                        on_click:
+                          - homeassistant.action:
+                              action: light.toggle
+                              data:
+                                entity_id: ${light_hall}
+                    - button:
+                        id: btn_bath
+                        checkable: true
+                        styles: tile
+                        grid_cell_column_pos: 1
+                        grid_cell_row_pos: 1
+                        grid_cell_x_align: STRETCH
+                        grid_cell_y_align: STRETCH
+                        widgets:
+                          - label:
+                              id: lbl_bath
+                              text_font: icon_font_30
+                              text: "\U000F09A0"
+                              translate_y: -8
+                          - label:
+                              text_font: my_font10
+                              text: "Bath"
+                              translate_y: 20
+                        on_click:
+                          - homeassistant.action:
+                              action: light.toggle
+                              data:
+                                entity_id: ${light_bath_all}
+                    - button:
+                        id: btn_all_off
+                        checkable: false
+                        styles: tile
+                        grid_cell_column_pos: 2
+                        grid_cell_row_pos: 1
+                        grid_cell_x_align: STRETCH
+                        grid_cell_y_align: STRETCH
+                        widgets:
+                          - label:
+                              id: lbl_all_off
+                              text_font: icon_font_30
+                              text: "\U000F0425"
+                              translate_y: -8
+                          - label:
+                              text_font: my_font10
+                              text: "All Off"
+                              translate_y: 20
+                        on_click:
+                          - script.execute: all_lights_off
+              - obj:
+                  id: np_card
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  clickable: true
+                  align: TOP_MID
+                  translate_y: 154
+                  width: 94%
+                  height: 30
+                  on_click:
+                    - script.execute: go_media
+                  widgets:
+                    - label:
+                        id: np_icon
+                        text_font: icon_font_20
+                        text_color: light_blue
+                        text: "\U000F075A"
+                        align: LEFT_MID
+                        translate_x: 8
+                    - label:
+                        id: np_title
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: " "
+                        align: LEFT_MID
+                        translate_x: 36
+                        width: 160
+                        long_mode: SCROLL_CIRCULAR
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  clickable: true
+                  align: BOTTOM_LEFT
+                  translate_x: 10
+                  translate_y: -6
+                  width: 44%
+                  height: 42
+                  on_click:
+                    - script.execute: go_energy
+                  widgets:
+                    - label:
+                        text_font: icon_font_20
+                        text_color: green
+                        text: "\U000F032A"
+                        align: LEFT_MID
+                        translate_x: 8
+                    - label:
+                        id: home_energy_now
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: " "
+                        align: TOP_LEFT
+                        translate_x: 34
+                        translate_y: 7
+                    - label:
+                        id: home_energy_cost
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: " "
+                        align: BOTTOM_LEFT
+                        translate_x: 34
+                        translate_y: -7
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  clickable: true
+                  align: BOTTOM_RIGHT
+                  translate_x: -10
+                  translate_y: -6
+                  width: 44%
+                  height: 42
+                  on_click:
                     - homeassistant.action:
                         action: switch.toggle
                         data:
-                          entity_id: ${garage_door}
+                          entity_id: ${garage_switch}
+                  widgets:
+                    - label:
+                        id: home_garage_icon
+                        text_font: icon_font_20
+                        text: " "
+                        align: LEFT_MID
+                        translate_x: 8
+                    - label:
+                        id: home_garage_state
+                        text_font: my_font14
+                        styles: txt_purple
+                        text: " "
+                        align: LEFT_MID
+                        translate_x: 34
+
+    - id: media_page
+      widgets:
+        - obj:
+            styles: content
+            width: 100%
+            align: TOP_LEFT
+            widgets:
+              - obj:
+                  styles: hero
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 3
+                  width: 94%
+                  height: 114
+                  widgets:
+                    - button:
+                        id: mback
+                        styles: glass_btn
+                        align: TOP_LEFT
+                        translate_x: 12
+                        translate_y: 6
+                        width: 28
+                        height: 28
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text_color: 0xFFFFFF
+                              text: "\U000F004D"
+                        on_click:
+                          - script.execute: go_home
+                    - label:
+                        id: np2_caption
+                        text_font: my_font10
+                        text_color: 0xE3B8D6
+                        text: "NOW PLAYING"
+                        align: TOP_LEFT
+                        translate_x: 50
+                        translate_y: 8
+                    - label:
+                        id: np2_state
+                        text_font: my_font10
+                        text_color: 0xD6BED0
+                        text: " "
+                        align: TOP_RIGHT
+                        translate_x: -14
+                        translate_y: 8
+                    - obj:
+                        align: TOP_LEFT
+                        translate_x: 12
+                        translate_y: 26
+                        width: 276
+                        height: 1
+                        bg_color: 0xFFFFFF
+                        bg_opa: 18%
+                        border_width: 0
+                        radius: 0
+                        shadow_width: 0
+                        pad_all: 0
+                    - obj:
+                        align: TOP_LEFT
+                        translate_x: 14
+                        translate_y: 30
+                        width: 40
+                        height: 40
+                        radius: 10
+                        bg_color: 0xAE6FA0
+                        bg_grad_color: 0x8A4F7E
+                        bg_grad_dir: VER
+                        bg_opa: COVER
+                        border_color: 0xFFFFFF
+                        border_opa: 25%
+                        border_width: 1
+                        shadow_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text_color: 0xFFFFFF
+                              text: "\U000F075A"
+                    - label:
+                        id: np2_title
+                        text_font: my_font14
+                        text_color: 0xFFFFFF
+                        text: " "
+                        align: TOP_LEFT
+                        translate_x: 62
+                        translate_y: 31
+                        width: 228
+                        long_mode: SCROLL_CIRCULAR
+                    - label:
+                        id: np2_artist
+                        text_font: my_font12
+                        text_color: 0xD6BED0
+                        text: " "
+                        align: TOP_LEFT
+                        translate_x: 62
+                        translate_y: 48
+                        width: 228
+                        long_mode: DOT
+                    - button:
+                        id: mprev
+                        styles: glass_btn
+                        align: TOP_LEFT
+                        translate_x: 50
+                        translate_y: 74
+                        width: 34
+                        height: 34
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text_color: 0xFFFFFF
+                              text: "\U000F04AE"
+                        on_click:
+                          - homeassistant.action:
+                              action: media_player.media_previous_track
+                              data:
+                                entity_id: !lambda return id(g_media);
+                          - script.execute: sync_media
+                    - button:
+                        id: mpp
+                        styles: play_btn
+                        align: TOP_LEFT
+                        translate_x: 90
+                        translate_y: 70
+                        width: 40
+                        height: 40
+                        widgets:
+                          - label:
+                              id: mpp_icon
+                              text_font: icon_font_24
+                              text_color: 0x0B1F33
+                              text: "\U000F040A"
+                        on_click:
+                          - homeassistant.action:
+                              action: media_player.media_play_pause
+                              data:
+                                entity_id: !lambda return id(g_media);
+                          - script.execute: sync_media
+                    - button:
+                        id: mnext
+                        styles: glass_btn
+                        align: TOP_LEFT
+                        translate_x: 136
+                        translate_y: 74
+                        width: 34
+                        height: 34
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text_color: 0xFFFFFF
+                              text: "\U000F04AD"
+                        on_click:
+                          - homeassistant.action:
+                              action: media_player.media_next_track
+                              data:
+                                entity_id: !lambda return id(g_media);
+                          - script.execute: sync_media
+                    - button:
+                        id: mfav
+                        styles: glass_btn
+                        hidden: true
+                        align: TOP_LEFT
+                        translate_x: 176
+                        translate_y: 74
+                        width: 34
+                        height: 34
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text_color: 0xD92BBC
+                              text: "\U000F02D1"
+                        on_click:
+                          - if:
+                              condition:
+                                lambda: return !id(g_fav).empty() && id(g_fav) != "unknown" && id(g_fav) != "None";
+                              then:
+                                - homeassistant.action:
+                                    action: button.press
+                                    data:
+                                      entity_id: !lambda return id(g_fav);
+                    - button:
+                        id: mpwr
+                        styles: power_btn
+                        align: TOP_LEFT
+                        translate_x: 216
+                        translate_y: 74
+                        width: 34
+                        height: 34
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text_color: 0xFFFFFF
+                              text: "\U000F0425"
+                        on_click:
+                          - homeassistant.action:
+                              action: media_player.turn_off
+                              data:
+                                entity_id: !lambda return id(g_media);
+                          - script.execute: sync_media
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 121
+                  width: 94%
+                  height: 54
+                  widgets:
+                    - label:
+                        text: "Play On"
+                        styles: txt_purple
+                        align: TOP_LEFT
+                        translate_x: 14
+                        translate_y: 2
+                    - obj:
+                        id: dev_scroll
+                        align: TOP_LEFT
+                        translate_x: 8
+                        translate_y: 18
+                        width: 284
+                        height: 32
+                        bg_opa: TRANSP
+                        border_width: 0
+                        radius: 0
+                        shadow_width: 0
+                        pad_all: 0
+                        scroll_dir: VER
+                        scrollbar_mode: AUTO
+                        widgets:
+                          - button:
+                              id: dev1_btn
+                              styles: tile
+                              checkable: true
+                              align: TOP_LEFT
+                              translate_x: 0
+                              translate_y: 0
+                              width: 138
+                              height: 15
+                              widgets:
+                                - label:
+                                    id: dev1_icon
+                                    text_font: icon_font_12
+                                    text_color: 0xFFFFFF
+                                    text: "\U000F0502"
+                                    align: LEFT_MID
+                                    translate_x: 6
+                                - label:
+                                    id: dev1_name
+                                    text_font: my_font10
+                                    text_color: 0xFFFFFF
+                                    text: "--"
+                                    align: LEFT_MID
+                                    translate_x: 20
+                                    width: 110
+                                    long_mode: DOT
+                              on_click:
+                                - lambda: |-
+                                    id(g_media) = id(g_d1);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                          - button:
+                              id: dev2_btn
+                              styles: tile
+                              checkable: true
+                              align: TOP_LEFT
+                              translate_x: 146
+                              translate_y: 0
+                              width: 138
+                              height: 15
+                              widgets:
+                                - label:
+                                    id: dev2_icon
+                                    text_font: icon_font_12
+                                    text_color: 0xFFFFFF
+                                    text: "\U000F0502"
+                                    align: LEFT_MID
+                                    translate_x: 6
+                                - label:
+                                    id: dev2_name
+                                    text_font: my_font10
+                                    text_color: 0xFFFFFF
+                                    text: "--"
+                                    align: LEFT_MID
+                                    translate_x: 20
+                                    width: 110
+                                    long_mode: DOT
+                              on_click:
+                                - lambda: |-
+                                    id(g_media) = id(g_d2);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                          - button:
+                              id: dev3_btn
+                              styles: tile
+                              checkable: true
+                              align: TOP_LEFT
+                              translate_x: 0
+                              translate_y: 17
+                              width: 138
+                              height: 15
+                              widgets:
+                                - label:
+                                    id: dev3_icon
+                                    text_font: icon_font_12
+                                    text_color: 0xFFFFFF
+                                    text: "\U000F0502"
+                                    align: LEFT_MID
+                                    translate_x: 6
+                                - label:
+                                    id: dev3_name
+                                    text_font: my_font10
+                                    text_color: 0xFFFFFF
+                                    text: "--"
+                                    align: LEFT_MID
+                                    translate_x: 20
+                                    width: 110
+                                    long_mode: DOT
+                              on_click:
+                                - lambda: |-
+                                    id(g_media) = id(g_d3);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                          - button:
+                              id: dev4_btn
+                              styles: tile
+                              checkable: true
+                              align: TOP_LEFT
+                              translate_x: 146
+                              translate_y: 17
+                              width: 138
+                              height: 15
+                              widgets:
+                                - label:
+                                    id: dev4_icon
+                                    text_font: icon_font_12
+                                    text_color: 0xFFFFFF
+                                    text: "\U000F0502"
+                                    align: LEFT_MID
+                                    translate_x: 6
+                                - label:
+                                    id: dev4_name
+                                    text_font: my_font10
+                                    text_color: 0xFFFFFF
+                                    text: "--"
+                                    align: LEFT_MID
+                                    translate_x: 20
+                                    width: 110
+                                    long_mode: DOT
+                              on_click:
+                                - lambda: |-
+                                    id(g_media) = id(g_d4);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                          - button:
+                              id: dev5_btn
+                              styles: tile
+                              checkable: true
+                              hidden: true
+                              align: TOP_LEFT
+                              translate_x: 0
+                              translate_y: 34
+                              width: 138
+                              height: 15
+                              widgets:
+                                - label:
+                                    id: dev5_icon
+                                    text_font: icon_font_12
+                                    text_color: 0xFFFFFF
+                                    text: "\U000F0502"
+                                    align: LEFT_MID
+                                    translate_x: 6
+                                - label:
+                                    id: dev5_name
+                                    text_font: my_font10
+                                    text_color: 0xFFFFFF
+                                    text: "--"
+                                    align: LEFT_MID
+                                    translate_x: 20
+                                    width: 110
+                                    long_mode: DOT
+                              on_click:
+                                - lambda: |-
+                                    id(g_media) = id(g_d5);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                          - button:
+                              id: dev6_btn
+                              styles: tile
+                              checkable: true
+                              hidden: true
+                              align: TOP_LEFT
+                              translate_x: 146
+                              translate_y: 34
+                              width: 138
+                              height: 15
+                              widgets:
+                                - label:
+                                    id: dev6_icon
+                                    text_font: icon_font_12
+                                    text_color: 0xFFFFFF
+                                    text: "\U000F0502"
+                                    align: LEFT_MID
+                                    translate_x: 6
+                                - label:
+                                    id: dev6_name
+                                    text_font: my_font10
+                                    text_color: 0xFFFFFF
+                                    text: "--"
+                                    align: LEFT_MID
+                                    translate_x: 20
+                                    width: 110
+                                    long_mode: DOT
+                              on_click:
+                                - lambda: |-
+                                    id(g_media) = id(g_d6);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                          - button:
+                              id: dev7_btn
+                              styles: tile
+                              checkable: true
+                              hidden: true
+                              align: TOP_LEFT
+                              translate_x: 0
+                              translate_y: 51
+                              width: 138
+                              height: 15
+                              widgets:
+                                - label:
+                                    id: dev7_icon
+                                    text_font: icon_font_12
+                                    text_color: 0xFFFFFF
+                                    text: "\U000F0502"
+                                    align: LEFT_MID
+                                    translate_x: 6
+                                - label:
+                                    id: dev7_name
+                                    text_font: my_font10
+                                    text_color: 0xFFFFFF
+                                    text: "--"
+                                    align: LEFT_MID
+                                    translate_x: 20
+                                    width: 110
+                                    long_mode: DOT
+                              on_click:
+                                - lambda: |-
+                                    id(g_media) = id(g_d7);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                          - button:
+                              id: dev8_btn
+                              styles: tile
+                              checkable: true
+                              hidden: true
+                              align: TOP_LEFT
+                              translate_x: 146
+                              translate_y: 51
+                              width: 138
+                              height: 15
+                              widgets:
+                                - label:
+                                    id: dev8_icon
+                                    text_font: icon_font_12
+                                    text_color: 0xFFFFFF
+                                    text: "\U000F0502"
+                                    align: LEFT_MID
+                                    translate_x: 6
+                                - label:
+                                    id: dev8_name
+                                    text_font: my_font10
+                                    text_color: 0xFFFFFF
+                                    text: "--"
+                                    align: LEFT_MID
+                                    translate_x: 20
+                                    width: 110
+                                    long_mode: DOT
+                              on_click:
+                                - lambda: |-
+                                    id(g_media) = id(g_d8);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+              - obj:
+                  id: pl_card
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 178
+                  width: 94%
+                  height: 60
+                  widgets:
+                    - label:
+                        text: "Playlists"
+                        styles: txt_purple
+                        align: TOP_LEFT
+                        translate_x: 14
+                        translate_y: 2
+                    - obj:
+                        id: pl_scroll
+                        align: TOP_LEFT
+                        translate_x: 8
+                        translate_y: 18
+                        width: 284
+                        height: 36
+                        bg_opa: TRANSP
+                        border_width: 0
+                        radius: 0
+                        shadow_width: 0
+                        pad_all: 0
+                        scroll_dir: VER
+                        scrollbar_mode: AUTO
+                        widgets:
+                          - button:
+                              id: pl1_btn
+                              styles: list_row
+                              align: TOP_LEFT
+                              translate_y: 0
+                              width: 284
+                              height: 15
+                              widgets:
+                                - label:
+                                    text_font: icon_font_12
+                                    text: "\U000F040C"
+                                    align: LEFT_MID
+                                    translate_x: 8
+                                - label:
+                                    id: pl1_label
+                                    text_font: my_font10
+                                    styles: txt_purple
+                                    text: " "
+                                    align: LEFT_MID
+                                    translate_x: 24
+                                    width: 252
+                                    long_mode: DOT
+                              on_click:
+                                - if:
+                                    condition:
+                                      lambda: return !id(g_u1).empty() && id(g_u1) != "unknown" && id(g_u1) != "None";
+                                    then:
+                                      - homeassistant.action:
+                                          action: music_assistant.play_media
+                                          data:
+                                            media_id: !lambda return id(g_u1);
+                                            media_type: playlist
+                                            entity_id: !lambda return id(g_media);
+                          - button:
+                              id: pl2_btn
+                              styles: list_row
+                              align: TOP_LEFT
+                              translate_y: 17
+                              width: 284
+                              height: 15
+                              widgets:
+                                - label:
+                                    text_font: icon_font_12
+                                    text: "\U000F040C"
+                                    align: LEFT_MID
+                                    translate_x: 8
+                                - label:
+                                    id: pl2_label
+                                    text_font: my_font10
+                                    styles: txt_purple
+                                    text: " "
+                                    align: LEFT_MID
+                                    translate_x: 24
+                                    width: 252
+                                    long_mode: DOT
+                              on_click:
+                                - if:
+                                    condition:
+                                      lambda: return !id(g_u2).empty() && id(g_u2) != "unknown" && id(g_u2) != "None";
+                                    then:
+                                      - homeassistant.action:
+                                          action: music_assistant.play_media
+                                          data:
+                                            media_id: !lambda return id(g_u2);
+                                            media_type: playlist
+                                            entity_id: !lambda return id(g_media);
+                          - button:
+                              id: pl3_btn
+                              styles: list_row
+                              align: TOP_LEFT
+                              translate_y: 34
+                              width: 284
+                              height: 15
+                              widgets:
+                                - label:
+                                    text_font: icon_font_12
+                                    text: "\U000F040C"
+                                    align: LEFT_MID
+                                    translate_x: 8
+                                - label:
+                                    id: pl3_label
+                                    text_font: my_font10
+                                    styles: txt_purple
+                                    text: " "
+                                    align: LEFT_MID
+                                    translate_x: 24
+                                    width: 252
+                                    long_mode: DOT
+                              on_click:
+                                - if:
+                                    condition:
+                                      lambda: return !id(g_u3).empty() && id(g_u3) != "unknown" && id(g_u3) != "None";
+                                    then:
+                                      - homeassistant.action:
+                                          action: music_assistant.play_media
+                                          data:
+                                            media_id: !lambda return id(g_u3);
+                                            media_type: playlist
+                                            entity_id: !lambda return id(g_media);
+                          - button:
+                              id: pl4_btn
+                              styles: list_row
+                              hidden: true
+                              align: TOP_LEFT
+                              translate_y: 51
+                              width: 284
+                              height: 15
+                              widgets:
+                                - label:
+                                    text_font: icon_font_12
+                                    text: "\U000F040C"
+                                    align: LEFT_MID
+                                    translate_x: 8
+                                - label:
+                                    id: pl4_label
+                                    text_font: my_font10
+                                    styles: txt_purple
+                                    text: " "
+                                    align: LEFT_MID
+                                    translate_x: 24
+                                    width: 252
+                                    long_mode: DOT
+                              on_click:
+                                - if:
+                                    condition:
+                                      lambda: return !id(g_u4).empty() && id(g_u4) != "unknown" && id(g_u4) != "None";
+                                    then:
+                                      - homeassistant.action:
+                                          action: music_assistant.play_media
+                                          data:
+                                            media_id: !lambda return id(g_u4);
+                                            media_type: playlist
+                                            entity_id: !lambda return id(g_media);
+                          - button:
+                              id: pl5_btn
+                              styles: list_row
+                              hidden: true
+                              align: TOP_LEFT
+                              translate_y: 68
+                              width: 284
+                              height: 15
+                              widgets:
+                                - label:
+                                    text_font: icon_font_12
+                                    text: "\U000F040C"
+                                    align: LEFT_MID
+                                    translate_x: 8
+                                - label:
+                                    id: pl5_label
+                                    text_font: my_font10
+                                    styles: txt_purple
+                                    text: " "
+                                    align: LEFT_MID
+                                    translate_x: 24
+                                    width: 252
+                                    long_mode: DOT
+                              on_click:
+                                - if:
+                                    condition:
+                                      lambda: return !id(g_u5).empty() && id(g_u5) != "unknown" && id(g_u5) != "None";
+                                    then:
+                                      - homeassistant.action:
+                                          action: music_assistant.play_media
+                                          data:
+                                            media_id: !lambda return id(g_u5);
+                                            media_type: playlist
+                                            entity_id: !lambda return id(g_media);
+                          - button:
+                              id: pl6_btn
+                              styles: list_row
+                              hidden: true
+                              align: TOP_LEFT
+                              translate_y: 85
+                              width: 284
+                              height: 15
+                              widgets:
+                                - label:
+                                    text_font: icon_font_12
+                                    text: "\U000F040C"
+                                    align: LEFT_MID
+                                    translate_x: 8
+                                - label:
+                                    id: pl6_label
+                                    text_font: my_font10
+                                    styles: txt_purple
+                                    text: " "
+                                    align: LEFT_MID
+                                    translate_x: 24
+                                    width: 252
+                                    long_mode: DOT
+                              on_click:
+                                - if:
+                                    condition:
+                                      lambda: return !id(g_u6).empty() && id(g_u6) != "unknown" && id(g_u6) != "None";
+                                    then:
+                                      - homeassistant.action:
+                                          action: music_assistant.play_media
+                                          data:
+                                            media_id: !lambda return id(g_u6);
+                                            media_type: playlist
+                                            entity_id: !lambda return id(g_media);
+
+
+    - id: weather_page
+      widgets:
+        - obj:
+            styles: content
+            widgets:
               - label:
-                  id: garage_door_title
-                  align: CENTER
-                  translate_y: -25
-                  translate_x: 0
-                  text_color: white
-                  text_font: my_font14
-                  text: "Garage Door"
-              - label:
-                  id: display_garage_status
+                  text: "Forecast"
+                  styles: txt_purple
                   align: TOP_LEFT
-                  translate_x: 20
-                  translate_y: 15
-                  text_font: my_font12
-                  text_color: white
-                  text: " "
+                  translate_x: 12
+                  translate_y: 8
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 28
+                  width: 94%
+                  height: 19%
+                  widgets:
+                    - label:
+                        id: wx_day1
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: "--"
+                        align: LEFT_MID
+                        translate_x: 14
+                    - label:
+                        id: wx_icon1
+                        text_font: icon_font_24
+                        styles: txt_purple
+                        text: " "
+                        align: LEFT_MID
+                        translate_x: 62
+                    - label:
+                        id: wx_hi1
+                        text_font: my_font14
+                        styles: txt_purple
+                        text: "--"
+                        align: LEFT_MID
+                        translate_x: 118
+                    - label:
+                        id: wx_lo1
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: "--"
+                        align: LEFT_MID
+                        translate_x: 158
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 79
+                  width: 94%
+                  height: 19%
+                  widgets:
+                    - label:
+                        id: wx_day2
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: "--"
+                        align: LEFT_MID
+                        translate_x: 14
+                    - label:
+                        id: wx_icon2
+                        text_font: icon_font_24
+                        styles: txt_purple
+                        text: " "
+                        align: LEFT_MID
+                        translate_x: 62
+                    - label:
+                        id: wx_hi2
+                        text_font: my_font14
+                        styles: txt_purple
+                        text: "--"
+                        align: LEFT_MID
+                        translate_x: 118
+                    - label:
+                        id: wx_lo2
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: "--"
+                        align: LEFT_MID
+                        translate_x: 158
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 130
+                  width: 94%
+                  height: 19%
+                  widgets:
+                    - label:
+                        id: wx_day3
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: "--"
+                        align: LEFT_MID
+                        translate_x: 14
+                    - label:
+                        id: wx_icon3
+                        text_font: icon_font_24
+                        styles: txt_purple
+                        text: " "
+                        align: LEFT_MID
+                        translate_x: 62
+                    - label:
+                        id: wx_hi3
+                        text_font: my_font14
+                        styles: txt_purple
+                        text: "--"
+                        align: LEFT_MID
+                        translate_x: 118
+                    - label:
+                        id: wx_lo3
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: "--"
+                        align: LEFT_MID
+                        translate_x: 158
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 181
+                  width: 94%
+                  height: 19%
+                  widgets:
+                    - label:
+                        id: wx_day4
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: "--"
+                        align: LEFT_MID
+                        translate_x: 14
+                    - label:
+                        id: wx_icon4
+                        text_font: icon_font_24
+                        styles: txt_purple
+                        text: " "
+                        align: LEFT_MID
+                        translate_x: 62
+                    - label:
+                        id: wx_hi4
+                        text_font: my_font14
+                        styles: txt_purple
+                        text: "--"
+                        align: LEFT_MID
+                        translate_x: 118
+                    - label:
+                        id: wx_lo4
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: "--"
+                        align: LEFT_MID
+                        translate_x: 158
+
+    - id: climate_page
+      widgets:
+        - obj:
+            styles: content
+            widgets:
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 8
+                  width: 94%
+                  height: 46%
+                  widgets:
+                    - label:
+                        text: "Downstairs"
+                        styles: txt_purple
+                        align: TOP_LEFT
+                        translate_x: 12
+                        translate_y: 6
+                    - label:
+                        id: ds_state_text
+                        text_font: my_font14
+                        text: " "
+                        align: TOP_RIGHT
+                        translate_x: -12
+                        translate_y: 8
+                    - label:
+                        id: ds_actual_temp
+                        text_font: my_font22
+                        styles: txt_purple
+                        text: " "
+                        align: TOP_LEFT
+                        translate_x: 12
+                        translate_y: 30
+                    - label:
+                        id: ds_hum
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: " "
+                        align: TOP_LEFT
+                        translate_x: 12
+                        translate_y: 60
+                    - button:
+                        id: ds_minus
+                        align: TOP_LEFT
+                        translate_x: 104
+                        translate_y: 30
+                        width: 30
+                        height: 30
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text: "\U000F0374"
+                        on_click:
+                          - homeassistant.action:
+                              action: climate.set_temperature
+                              data:
+                                entity_id: ${ds_climate}
+                                temperature: !lambda |-
+                                  if (isnan(id(ds_set).state)) return id(ds_actual).state;
+                                  return id(ds_set).state - 1;
+                    - label:
+                        id: ds_setpoint
+                        text_font: my_font14
+                        styles: txt_purple
+                        text: " "
+                        width: 36
+                        align: TOP_LEFT
+                        translate_x: 136
+                        translate_y: 36
+                    - button:
+                        id: ds_plus
+                        align: TOP_LEFT
+                        translate_x: 172
+                        translate_y: 30
+                        width: 30
+                        height: 30
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text: "\U000F0415"
+                        on_click:
+                          - homeassistant.action:
+                              action: climate.set_temperature
+                              data:
+                                entity_id: ${ds_climate}
+                                temperature: !lambda |-
+                                  if (isnan(id(ds_set).state)) return id(ds_actual).state;
+                                  return id(ds_set).state + 1;
+                    - button:
+                        id: ds_heat
+                        checkable: true
+                        align: TOP_LEFT
+                        translate_x: 12
+                        translate_y: 76
+                        width: 40
+                        height: 26
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text: "\U000F0238"
+                        on_click:
+                          - homeassistant.action:
+                              action: climate.set_hvac_mode
+                              data:
+                                entity_id: ${ds_climate}
+                                hvac_mode: heat
+                    - button:
+                        id: ds_cool
+                        checkable: true
+                        align: TOP_LEFT
+                        translate_x: 56
+                        translate_y: 76
+                        width: 40
+                        height: 26
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text: "\U000F0717"
+                        on_click:
+                          - homeassistant.action:
+                              action: climate.set_hvac_mode
+                              data:
+                                entity_id: ${ds_climate}
+                                hvac_mode: cool
+                    - button:
+                        id: ds_off
+                        checkable: true
+                        align: TOP_LEFT
+                        translate_x: 100
+                        translate_y: 76
+                        width: 40
+                        height: 26
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text: "\U000F0425"
+                        on_click:
+                          - homeassistant.action:
+                              action: climate.set_hvac_mode
+                              data:
+                                entity_id: ${ds_climate}
+                                hvac_mode: "off"
+                    - button:
+                        id: ds_fan
+                        checkable: true
+                        align: TOP_LEFT
+                        translate_x: 144
+                        translate_y: 76
+                        width: 40
+                        height: 26
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text: "\U000F0210"
+                        on_click:
+                          - homeassistant.action:
+                              action: climate.set_fan_mode
+                              data:
+                                entity_id: ${ds_climate}
+                                fan_mode: !lambda |-
+                                  if (id(ds_fan_state).state == "on") return std::string("auto");
+                                  return std::string("on");
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 126
+                  width: 94%
+                  height: 46%
+                  widgets:
+                    - label:
+                        text: "Upstairs"
+                        styles: txt_purple
+                        align: TOP_LEFT
+                        translate_x: 12
+                        translate_y: 6
+                    - label:
+                        id: us_state_text
+                        text_font: my_font14
+                        text: " "
+                        align: TOP_RIGHT
+                        translate_x: -12
+                        translate_y: 8
+                    - label:
+                        id: us_actual_temp
+                        text_font: my_font22
+                        styles: txt_purple
+                        text: " "
+                        align: TOP_LEFT
+                        translate_x: 12
+                        translate_y: 30
+                    - button:
+                        id: us_minus
+                        align: TOP_LEFT
+                        translate_x: 104
+                        translate_y: 30
+                        width: 30
+                        height: 30
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text: "\U000F0374"
+                        on_click:
+                          - homeassistant.action:
+                              action: climate.set_temperature
+                              data:
+                                entity_id: ${us_climate}
+                                temperature: !lambda |-
+                                  if (isnan(id(us_set).state)) return id(us_actual).state;
+                                  return id(us_set).state - 1;
+                    - label:
+                        id: us_setpoint
+                        text_font: my_font14
+                        styles: txt_purple
+                        text: " "
+                        width: 36
+                        align: TOP_LEFT
+                        translate_x: 136
+                        translate_y: 36
+                    - button:
+                        id: us_plus
+                        align: TOP_LEFT
+                        translate_x: 172
+                        translate_y: 30
+                        width: 30
+                        height: 30
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text: "\U000F0415"
+                        on_click:
+                          - homeassistant.action:
+                              action: climate.set_temperature
+                              data:
+                                entity_id: ${us_climate}
+                                temperature: !lambda |-
+                                  if (isnan(id(us_set).state)) return id(us_actual).state;
+                                  return id(us_set).state + 1;
+                    - button:
+                        id: us_heat
+                        checkable: true
+                        align: TOP_LEFT
+                        translate_x: 12
+                        translate_y: 76
+                        width: 40
+                        height: 26
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text: "\U000F0238"
+                        on_click:
+                          - homeassistant.action:
+                              action: climate.set_hvac_mode
+                              data:
+                                entity_id: ${us_climate}
+                                hvac_mode: heat
+                    - button:
+                        id: us_cool
+                        checkable: true
+                        align: TOP_LEFT
+                        translate_x: 56
+                        translate_y: 76
+                        width: 40
+                        height: 26
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text: "\U000F0717"
+                        on_click:
+                          - homeassistant.action:
+                              action: climate.set_hvac_mode
+                              data:
+                                entity_id: ${us_climate}
+                                hvac_mode: cool
+                    - button:
+                        id: us_off
+                        checkable: true
+                        align: TOP_LEFT
+                        translate_x: 100
+                        translate_y: 76
+                        width: 40
+                        height: 26
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text: "\U000F0425"
+                        on_click:
+                          - homeassistant.action:
+                              action: climate.set_hvac_mode
+                              data:
+                                entity_id: ${us_climate}
+                                hvac_mode: "off"
+
+    - id: energy_page
+      widgets:
+        - obj:
+            styles: content
+            widgets:
+              - obj:
+                  styles: hero
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 8
+                  width: 94%
+                  height: 40%
+                  widgets:
+                    - label:
+                        text_font: icon_font_30
+                        text: "\U000F1A57"
+                        align: TOP_LEFT
+                        translate_x: 14
+                        translate_y: 16
+                    - label:
+                        id: energy_now
+                        text_font: my_font22
+                        text: " "
+                        align: TOP_LEFT
+                        translate_x: 54
+                        translate_y: 14
+                    - label:
+                        text: "Current Draw"
+                        text_font: my_font12
+                        align: TOP_LEFT
+                        translate_x: 16
+                        translate_y: 70
+                    - label:
+                        text_font: icon_font_30
+                        text_color: green
+                        text: "\U000F032A"
+                        align: TOP_RIGHT
+                        translate_x: -16
+                        translate_y: 16
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_LEFT
+                  translate_x: 10
+                  translate_y: 112
+                  width: 30%
+                  height: 46%
+                  widgets:
+                    - label:
+                        text_font: icon_font_20
+                        styles: txt_purple
+                        text: "\U000F0128"
+                        align: TOP_MID
+                        translate_y: 8
+                    - label:
+                        id: energy_today
+                        text_font: my_font14
+                        styles: txt_purple
+                        text: " "
+                        align: TOP_MID
+                        translate_y: 40
+                    - label:
+                        text: "kWh Today"
+                        text_font: my_font10
+                        styles: txt_purple
+                        align: TOP_MID
+                        translate_y: 66
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 112
+                  width: 30%
+                  height: 46%
+                  widgets:
+                    - label:
+                        text_font: icon_font_20
+                        styles: txt_purple
+                        text: "\U000F0E17"
+                        align: TOP_MID
+                        translate_y: 8
+                    - label:
+                        id: energy_month
+                        text_font: my_font14
+                        styles: txt_purple
+                        text: " "
+                        align: TOP_MID
+                        translate_y: 40
+                    - label:
+                        text: "kWh Month"
+                        text_font: my_font10
+                        styles: txt_purple
+                        align: TOP_MID
+                        translate_y: 66
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_RIGHT
+                  translate_x: -10
+                  translate_y: 112
+                  width: 30%
+                  height: 46%
+                  widgets:
+                    - label:
+                        text_font: icon_font_20
+                        styles: txt_purple
+                        text: "\U000F01C1"
+                        align: TOP_MID
+                        translate_y: 8
+                    - label:
+                        id: energy_cost_value
+                        text_font: my_font14
+                        styles: txt_purple
+                        text: " "
+                        align: TOP_MID
+                        translate_y: 40
+                    - label:
+                        text: "Cost Today"
+                        text_font: my_font10
+                        styles: txt_purple
+                        align: TOP_MID
+                        translate_y: 66
+
+    - id: settings_page
+      widgets:
+        - obj:
+            styles: content
+            widgets:
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 4
+                  width: 94%
+                  height: 19%
+                  widgets:
+                    - label:
+                        text_font: icon_font_20
+                        styles: txt_purple
+                        text: "\U000F00DF"
+                        align: TOP_LEFT
+                        translate_x: 12
+                        translate_y: 4
+                    - label:
+                        text: "Display"
+                        styles: txt_purple
+                        align: TOP_LEFT
+                        translate_x: 38
+                        translate_y: 4
+                    - slider:
+                        id: screen_slider
+                        min_value: 10
+                        max_value: 100
+                        value: 100
+                        width: 55%
+                        height: 16
+                        align: TOP_LEFT
+                        translate_x: 38
+                        translate_y: 21
+                        on_value:
+                          - light.turn_on:
+                              id: backlight
+                              brightness: !lambda return x / 100.0f;
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 54
+                  width: 94%
+                  height: 19%
+                  widgets:
+                    - label:
+                        text_font: icon_font_20
+                        styles: txt_purple
+                        text: "\U000F1051"
+                        align: TOP_LEFT
+                        translate_x: 12
+                        translate_y: 6
+                    - label:
+                        text: "Case LED"
+                        styles: txt_purple
+                        align: TOP_LEFT
+                        translate_x: 38
+                        translate_y: 7
+                    - switch:
+                        id: led_switch
+                        align: TOP_RIGHT
+                        translate_x: -14
+                        translate_y: 6
+                        on_value:
+                          - if:
+                              condition:
+                                lambda: return x;
+                              then:
+                                - light.turn_on:
+                                    id: led
+                                    brightness: 1.0
+                              else:
+                                - light.turn_off: led
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 103
+                  width: 94%
+                  height: 21%
+                  widgets:
+                    - label:
+                        text_font: icon_font_20
+                        styles: txt_purple
+                        text: "\U000F050F"
+                        align: TOP_LEFT
+                        translate_x: 12
+                        translate_y: 6
+                    - label:
+                        text: "Units"
+                        styles: txt_purple
+                        align: TOP_LEFT
+                        translate_x: 38
+                        translate_y: 6
+                    - button:
+                        id: unit_f
+                        styles: tile
+                        checkable: true
+                        align: TOP_LEFT
+                        translate_x: 108
+                        translate_y: 20
+                        width: 46
+                        height: 24
+                        widgets:
+                          - label:
+                              text_font: my_font12
+                              text: "°F"
+                        on_click:
+                          - lambda: |-
+                              id(g_unit) = "F";
+                          - script.execute: update_unit_ui
+                    - button:
+                        id: unit_c
+                        styles: tile
+                        checkable: true
+                        align: TOP_LEFT
+                        translate_x: 156
+                        translate_y: 20
+                        width: 46
+                        height: 24
+                        widgets:
+                          - label:
+                              text_font: my_font12
+                              text: "°C"
+                        on_click:
+                          - lambda: |-
+                              id(g_unit) = "C";
+                          - script.execute: update_unit_ui
+              - obj:
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  align: TOP_MID
+                  translate_y: 158
+                  width: 94%
+                  height: 33%
+                  widgets:
+                    - label:
+                        text_font: icon_font_20
+                        styles: txt_purple
+                        text: "\U000F05A9"
+                        align: TOP_LEFT
+                        translate_x: 12
+                        translate_y: 6
+                    - label:
+                        text: "System"
+                        styles: txt_purple
+                        align: TOP_LEFT
+                        translate_x: 38
+                        translate_y: 7
+                    - label:
+                        id: sys_build
+                        text_font: my_font10
+                        styles: txt_purple
+                        text: !lambda |-
+                          char buf[Application::BUILD_TIME_STR_SIZE];
+                          App.get_build_time_string(buf);
+                          std::string s(buf);
+                          return "Build " + s.substr(5, 11);
+                        align: TOP_RIGHT
+                        translate_x: -12
+                        translate_y: 7
+                    - label:
+                        id: sys_ip
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: " "
+                        align: TOP_LEFT
+                        translate_x: 14
+                        translate_y: 26
+                    - label:
+                        id: sys_wifi
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: " "
+                        align: TOP_LEFT
+                        translate_x: 14
+                        translate_y: 42
+                    - label:
+                        id: sys_uptime
+                        text_font: my_font12
+                        styles: txt_purple
+                        text: " "
+                        align: TOP_LEFT
+                        translate_x: 14
+                        translate_y: 58
