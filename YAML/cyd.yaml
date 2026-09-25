@@ -40,6 +40,7 @@ esphome:
       - script.execute: update_playlists
       - script.execute: sync_media
       - script.execute: update_unit_ui
+      - script.execute: update_clock_ui
 
 esp32:
   board: esp32dev
@@ -69,6 +70,30 @@ api:
         - script.execute:
             id: goto_page
             page: !lambda return page;
+    - service: show_dlg
+      variables:
+        dlg: int
+      then:
+        - script.execute: go_media
+        - if:
+            condition:
+              lambda: return dlg == 1;
+            then:
+              - lvgl.widget.show: dl_backdrop
+              - lvgl.widget.show: dl_on
+              - lvgl.widget.hide: dl_pl
+            else:
+              - if:
+                  condition:
+                    lambda: return dlg == 2;
+                  then:
+                    - lvgl.widget.show: dl_backdrop
+                    - lvgl.widget.show: dl_pl
+                    - lvgl.widget.hide: dl_on
+                  else:
+                    - lvgl.widget.hide: dl_backdrop
+                    - lvgl.widget.hide: dl_on
+                    - lvgl.widget.hide: dl_pl
     - service: set_playlists
       variables:
         p1: string
@@ -203,6 +228,18 @@ globals:
     type: std::string
   - id: g_fav_on
     type: std::string
+  - id: g_vol
+    type: float
+    restore_value: false
+    initial_value: 'NAN'
+  - id: g_pic
+    type: std::string
+    restore_value: false
+    initial_value: '""'
+  - id: g_vol_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
   - id: g_st
     type: std::string
   - id: g_ti
@@ -245,6 +282,30 @@ globals:
     type: std::string
     restore_value: true
     initial_value: '"F"'
+  - id: g_clock24
+    type: std::string
+    restore_value: true
+    initial_value: '"0"'
+  - id: g_sleep_start
+    type: std::string
+    restore_value: true
+    initial_value: '"22"'
+  - id: g_sleep_end
+    type: std::string
+    restore_value: true
+    initial_value: '"7"'
+  - id: g_page
+    type: int
+    restore_value: false
+    initial_value: '0'
+  - id: g_on_saver
+    type: std::string
+    restore_value: false
+    initial_value: '""'
+  - id: g_dim_tap
+    type: std::string
+    restore_value: false
+    initial_value: '""'
   - id: g_out_t
     type: float
     initial_value: 'NAN'
@@ -337,7 +398,7 @@ touchscreen:
   spi_id: touch
   cs_pin: GPIO33
   interrupt_pin: GPIO36
-  update_interval: 50ms
+  update_interval: 30ms
   threshold: 400
   calibration:
     x_min: 280
@@ -350,7 +411,7 @@ touchscreen:
     swap_xy: true
   on_touch:
     then:
-      - script.execute: screen_saver
+      - script.execute: wake_tap
 
 display:
   - platform: ili9xxx
@@ -397,6 +458,32 @@ light:
     green: led_green
     blue: led_blue
     restore_mode: ALWAYS_OFF
+
+http_request:
+
+debug:
+
+image:
+  - platform: online_image
+    id: album_art
+    url: "http://album-art.invalid/placeholder.jpg"
+    format: JPEG
+    type: RGB565
+    resize: 52x52
+    buffer_size: 6144
+    on_download_finished:
+      - lambda: |-
+          id(album_art).get_lv_image_dsc();
+          lv_image_set_src(id(art_img), id(album_art).get_lv_image_dsc());
+          ESP_LOGW("cyd_pic", "download finished %dx%d", id(album_art).get_buffer_width(), id(album_art).get_buffer_height());
+      - lvgl.widget.hide: art_icon
+      - lvgl.widget.show: art_img
+      - lvgl.widget.redraw: art_img
+    on_error:
+      - lambda: ESP_LOGW("cyd_pic", "download error");
+      - lvgl.widget.show: art_icon
+      - lvgl.widget.hide: art_img
+      - lvgl.widget.redraw: art_tile
 
 text_sensor:
   - platform: wifi_info
@@ -500,6 +587,17 @@ sensor:
     name: "WiFi db"
     id: wifi_signal_db
     update_interval: 30s
+
+  - platform: debug
+    free:
+      name: "Heap Free"
+      entity_category: "diagnostic"
+    block:
+      name: "Heap Max Block"
+      entity_category: "diagnostic"
+    fragmentation:
+      name: "Heap Frag"
+      entity_category: "diagnostic"
 
   - platform: copy
     source_id: wifi_signal_db
@@ -746,6 +844,8 @@ script:
     parameters:
       page: int
     then:
+      - lambda: |-
+          id(g_page) = page;
       - lvgl.widget.update:
           id: nav_home
           state:
@@ -810,6 +910,9 @@ script:
   - id: go_media
     then:
       - lvgl.widget.hide: sidebar_obj
+      - lvgl.widget.hide: dl_backdrop
+      - lvgl.widget.hide: dl_on
+      - lvgl.widget.hide: dl_pl
       - lvgl.page.show: media_page
       - script.execute:
           id: nav_set
@@ -876,22 +979,87 @@ script:
       - delay: 4s
       - script.execute: go_home
 
+  - id: wake_tap
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: return id(g_dim_tap) == "1";
+          then:
+            - lambda: |-
+                id(g_dim_tap) = "0";
+            - script.execute: screen_saver
+          else:
+            - if:
+                condition:
+                  lambda: return !id(backlight).remote_values.is_on();
+                then:
+                  - script.stop: screen_saver
+                  - lambda: |-
+                      id(g_dim_tap) = "1";
+                      id(g_on_saver) = "1";
+                  - lvgl.widget.hide: sidebar_obj
+                  - lvgl.page.show: saver_page
+                  - light.turn_on:
+                      id: backlight
+                      brightness: 0.25
+                      transition_length: 200ms
+                  - delay: 5s
+                  - if:
+                      condition:
+                        lambda: return id(g_dim_tap) == "1";
+                      then:
+                        - lambda: |-
+                            id(g_dim_tap) = "0";
+                        - light.turn_off:
+                            id: backlight
+                            transition_length: 2s
+                else:
+                  - script.execute: screen_saver
+
   - id: screen_saver
     mode: restart
     then:
+      - if:
+          condition:
+            lambda: return id(g_on_saver) == "1";
+          then:
+            - lambda: |-
+                id(g_on_saver) = "0";
+            - script.execute:
+                id: goto_page
+                page: !lambda return id(g_page);
       - light.turn_on:
           id: backlight
           brightness: 1.0
           transition_length: 300ms
       - delay: 3min
-      - light.turn_on:
-          id: backlight
-          brightness: 0.25
-          transition_length: 2s
-      - delay: 1min
-      - light.turn_off:
-          id: backlight
-          transition_length: 2s
+      - if:
+          condition:
+            lambda: |-
+              auto t = id(sntp_time).now();
+              int s = atoi(id(g_sleep_start).c_str());
+              int e = atoi(id(g_sleep_end).c_str());
+              if (s == e) return false;
+              if (s < e) return t.hour >= s && t.hour < e;
+              return t.hour >= s || t.hour < e;
+          then:
+            - light.turn_off:
+                id: backlight
+                transition_length: 2s
+          else:
+            - lvgl.widget.hide: sidebar_obj
+            - lvgl.page.show: saver_page
+            - lambda: |-
+                id(g_on_saver) = "1";
+            - light.turn_on:
+                id: backlight
+                brightness: 0.25
+                transition_length: 2s
+            - delay: 1min
+            - light.turn_off:
+                id: backlight
+                transition_length: 2s
 
   - id: sync_media
     mode: single
@@ -980,6 +1148,43 @@ script:
                 bool ot = as_bool(resp["ot"], true);
                 bool cl = as_bool(resp["cl"], true);
                 id(g_fav_on) = as_bool(resp["fav_on"], false) ? "1" : "0";
+                {
+                  float nv = resp["vol"] | 0.0f;
+                  if (isnan(nv)) nv = 0.0f;
+                  if ((uint32_t)(millis() - id(g_vol_ms)) > 5000) {
+                    id(g_vol) = nv;
+                    int vip = (int)(nv * 100.0f + 0.5f);
+                    lv_slider_set_value(id(vol_slider), vip, LV_ANIM_OFF);
+                    char vb[8];
+                    snprintf(vb, sizeof(vb), "%d%%", vip);
+                    lv_label_set_text(id(vol_pct), vb);
+                  }
+                }
+                {
+                  std::string pic = resp["pic"] | "";
+                  if (pic != id(g_pic)) {
+                    if (!pic.empty()) {
+                      if (millis() > 45000) {
+                        id(g_pic) = pic;
+                        ESP_LOGW("cyd_pic", "fetch: %s", pic.c_str());
+                        id(album_art).set_url(pic);
+                        id(album_art).update();
+                      } else {
+                        ESP_LOGW("cyd_pic", "boot skip art (uptime %lu)", (unsigned long) millis());
+                      }
+                    } else {
+                      id(g_pic) = pic;
+                      id(album_art).release();
+                      lv_obj_add_flag(id(art_img), LV_OBJ_FLAG_HIDDEN);
+                      lv_obj_clear_flag(id(art_icon), LV_OBJ_FLAG_HIDDEN);
+                    }
+                  }
+                }
+                lv_obj_t *vbv[3] = {id(vol_icon), id(vol_slider), id(vol_pct)};
+                for (int i = 0; i < 3; i++) {
+                  if (n > 0) lv_obj_clear_flag(vbv[i], LV_OBJ_FLAG_HIDDEN);
+                  else lv_obj_add_flag(vbv[i], LV_OBJ_FLAG_HIDDEN);
+                }
                 lv_obj_t *wxobjs[3] = {id(display_weather_icon), id(display_weather_text), id(wx_tap)};
                 for (int i = 0; i < 3; i++) {
                   if (wx) lv_obj_clear_flag(wxobjs[i], LV_OBJ_FLAG_HIDDEN);
@@ -1000,6 +1205,8 @@ script:
                 lv_obj_set_style_translate_x(id(display_in_temp), show_ot ? 28 : 8, LV_PART_MAIN);
                 if (n > 0) lv_obj_clear_flag(id(np_card), LV_OBJ_FLAG_HIDDEN);
                 else lv_obj_add_flag(id(np_card), LV_OBJ_FLAG_HIDDEN);
+                if (n > 0) lv_obj_clear_flag(id(pop_on_btn), LV_OBJ_FLAG_HIDDEN);
+                else lv_obj_add_flag(id(pop_on_btn), LV_OBJ_FLAG_HIDDEN);
                 if (id(g_fav).empty() || id(g_fav) == "unknown" || id(g_fav) == "None")
                   lv_obj_add_flag(id(mfav), LV_OBJ_FLAG_HIDDEN);
                 else lv_obj_clear_flag(id(mfav), LV_OBJ_FLAG_HIDDEN);
@@ -1041,6 +1248,15 @@ script:
             if (a.empty() || a == "unknown" || a == "None") return {""};
             return {a};
       - lvgl.label.update:
+          id: saver_np
+          text: !lambda |-
+            std::string s = id(g_st);
+            if (s != "playing" && s != "paused") return {"Nothing playing"};
+            std::string t = id(g_ti);
+            if (t.empty() || t == "unknown" || t == "None") t = "Playing";
+            if (t.length() > 60) t = t.substr(0, 57) + "...";
+            return {t};
+      - lvgl.label.update:
           id: np2_state
           text: !lambda |-
             std::string s = id(g_st);
@@ -1060,6 +1276,20 @@ script:
           text: !lambda |-
             if (id(g_fav_on) == "1") return {"\U000F02D1"};
             return {"\U000F02D5"};
+      - lvgl.label.update:
+          id: pop_on_label
+          text: !lambda |-
+            std::string n = "";
+            if (id(g_media) == id(g_d1)) n = id(g_d1n);
+            else if (id(g_media) == id(g_d2)) n = id(g_d2n);
+            else if (id(g_media) == id(g_d3)) n = id(g_d3n);
+            else if (id(g_media) == id(g_d4)) n = id(g_d4n);
+            else if (id(g_media) == id(g_d5)) n = id(g_d5n);
+            else if (id(g_media) == id(g_d6)) n = id(g_d6n);
+            else if (id(g_media) == id(g_d7)) n = id(g_d7n);
+            else if (id(g_media) == id(g_d8)) n = id(g_d8n);
+            if (n.empty() || n == "unknown" || n == "None" || n == "--") return {"Play On"};
+            return {n};
       - lvgl.widget.update:
           id: np_icon
           text_color: !lambda |-
@@ -1117,6 +1347,16 @@ script:
             lv_obj_set_style_text_color(names[i], c, LV_PART_MAIN);
           }
 
+  - id: update_vol_ui
+    then:
+      - lambda: |-
+          int vip = (int)(id(g_vol) * 100.0f + 0.5f);
+          if (vip < 0) vip = 0;
+          if (vip > 100) vip = 100;
+          lv_slider_set_value(id(vol_slider), vip, LV_ANIM_OFF);
+          char vb[8];
+          snprintf(vb, sizeof(vb), "%d%%", vip);
+          lv_label_set_text(id(vol_pct), vb);
   - id: update_playlists
     then:
       - lambda: |-
@@ -1131,8 +1371,8 @@ script:
               any = true;
             }
           }
-          if (any) lv_obj_clear_flag(id(pl_card), LV_OBJ_FLAG_HIDDEN);
-          else lv_obj_add_flag(id(pl_card), LV_OBJ_FLAG_HIDDEN);
+          if (any) lv_obj_clear_flag(id(pop_pl_btn), LV_OBJ_FLAG_HIDDEN);
+          else lv_obj_add_flag(id(pop_pl_btn), LV_OBJ_FLAG_HIDDEN);
       - lvgl.label.update:
           id: pl1_label
           text: !lambda |-
@@ -1232,6 +1472,15 @@ script:
             char b[16];
             snprintf(b, sizeof(b), "%.0f", v);
             return {b};
+      - lvgl.label.update:
+          id: saver_temp
+          text: !lambda |-
+            float v = id(g_ds_act);
+            if (isnan(v)) return {"Inside --"};
+            if (id(g_unit) == "C") v = (v - 32.0f) * 5.0f / 9.0f;
+            char b[24];
+            snprintf(b, sizeof(b), "Inside %.0f°", v);
+            return {b};
 
   - id: update_weather_temps
     then:
@@ -1321,6 +1570,30 @@ script:
       - script.execute: update_temps
       - script.execute: update_weather_temps
 
+  - id: update_clock_ui
+    then:
+      - lvgl.widget.update:
+          id: clock12
+          state:
+            checked: !lambda return id(g_clock24) != "1";
+      - lvgl.widget.update:
+          id: clock24
+          state:
+            checked: !lambda return id(g_clock24) == "1";
+      - lvgl.label.update:
+          id: ck_start_lbl
+          text: !lambda |-
+            char b[8];
+            snprintf(b, sizeof(b), "%d:00", atoi(id(g_sleep_start).c_str()));
+            return {b};
+      - lvgl.label.update:
+          id: ck_end_lbl
+          text: !lambda |-
+            char b[8];
+            snprintf(b, sizeof(b), "%d:00", atoi(id(g_sleep_end).c_str()));
+            return {b};
+      - script.execute: time_update
+
   - id: weather_update
     then:
       - lvgl.label.update:
@@ -1381,7 +1654,12 @@ script:
           text: !lambda |-
             char str[20];
             time_t currTime = id(sntp_time).now().timestamp;
-            strftime(str, sizeof(str), "%H:%M", localtime(&currTime));
+            if (id(g_clock24) == "1") {
+              strftime(str, sizeof(str), "%H:%M", localtime(&currTime));
+            } else {
+              strftime(str, sizeof(str), "%I:%M", localtime(&currTime));
+              if (str[0] == '0') memmove(str, str + 1, strlen(str));
+            }
             return { str };
       - lvgl.label.update:
           id: display_day
@@ -1399,6 +1677,42 @@ script:
             auto now = id(sntp_time).now();
             snprintf(month_buf, sizeof(month_buf), "%s %d", mon_en[now.month - 1], now.day_of_month);
             return month_buf;
+      - lvgl.label.update:
+          id: saver_time
+          text: !lambda |-
+            char str[20];
+            time_t currTime = id(sntp_time).now().timestamp;
+            if (id(g_clock24) == "1") {
+              strftime(str, sizeof(str), "%H:%M", localtime(&currTime));
+            } else {
+              strftime(str, sizeof(str), "%I:%M", localtime(&currTime));
+              if (str[0] == '0') memmove(str, str + 1, strlen(str));
+            }
+            return { str };
+      - lvgl.label.update:
+          id: saver_ampm
+          text: !lambda |-
+            if (id(g_clock24) == "1") return std::string("");
+            char amp[8];
+            time_t currTime = id(sntp_time).now().timestamp;
+            strftime(amp, sizeof(amp), "%p", localtime(&currTime));
+            return std::string(amp);
+      - lvgl.label.update:
+          id: saver_day
+          text: !lambda |-
+            static const char * const days_en2[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+            static char sd_buf[32];
+            auto now = id(sntp_time).now();
+            snprintf(sd_buf, sizeof(sd_buf), "%s", days_en2[now.day_of_week - 1]);
+            return sd_buf;
+      - lvgl.label.update:
+          id: saver_date
+          text: !lambda |-
+            static const char * const mon_en2[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+            static char sm_buf[32];
+            auto now = id(sntp_time).now();
+            snprintf(sm_buf, sizeof(sm_buf), "%s %d", mon_en2[now.month - 1], now.day_of_month);
+            return sm_buf;
 
 font:
   - file:
@@ -1447,6 +1761,14 @@ font:
       weight: 700
     id: clock_font28
     size: 28
+    bpp: 8
+
+  - file:
+      type: gfonts
+      family: Roboto
+      weight: 700
+    id: clock_font48
+    size: 48
     bpp: 8
 
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
@@ -1506,6 +1828,7 @@ font:
       - "\U000F01C1"
       - "\U000F0374"
       - "\U000F0415"
+      - "\U000F0150"
       - "\U000F0238"
       - "\U000F0717"
       - "\U000F0210"
@@ -1521,6 +1844,12 @@ font:
       - "\U000F040C"
       - "\U000F02D1"
       - "\U000F02D5"
+      - "\U000F0156"
+      - "\U000F0143"
+      - "\U000F0140"
+      - "\U000F057E"
+      - "\U000F075E"
+      - "\U000F075D"
       - "\U000F004D"
 
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
@@ -1602,7 +1931,7 @@ color:
     hex: '4F4F4F'
 
 lvgl:
-  buffer_size: 25%
+  buffer_size: 12%
   displays:
     - device_display
   touchscreens:
@@ -1613,6 +1942,8 @@ lvgl:
       text_align: CENTER
       text_color: 0x3A1533
       align: CENTER
+      scrollbar_mode: "OFF"
+      scroll_dir: "NONE"
 
     button:
       bg_color: 0xA16793
@@ -1623,6 +1954,8 @@ lvgl:
       border_width: 1
       text_color: white
       radius: 12
+      scrollbar_mode: "OFF"
+      scroll_dir: "NONE"
       shadow_color: 0x000000
       shadow_opa: 30%
       shadow_width: 8
@@ -1821,11 +2154,19 @@ lvgl:
       pad_all: 0
       text_color: 0x3A1533
 
+    - id: scroll_btn
+      bg_color: 0xF3EBF7
+      border_color: 0xE0D2E8
+      border_width: 1
+      radius: 6
+      pad_all: 0
+      text_color: 0x4A1F45
+      shadow_width: 0
     - id: glass_btn
       bg_color: 0xFFFFFF
-      bg_opa: 15%
+      bg_opa: 18%
       border_color: 0xFFFFFF
-      border_opa: 35%
+      border_opa: 45%
       border_width: 1
       radius: 19
       pad_all: 0
@@ -1835,6 +2176,7 @@ lvgl:
   top_layer:
     widgets:
       - obj:
+          scrollbar_mode: "OFF"
           id: sidebar_obj
           hidden: true
           styles: sidebar
@@ -1936,6 +2278,7 @@ lvgl:
                 on_click:
                   - script.execute: go_weather
             - obj:
+                scrollbar_mode: "OFF"
                 styles: nav_bar
                 align: BOTTOM_MID
                 width: 96%
@@ -2012,9 +2355,11 @@ lvgl:
     - id: boot_page
       widgets:
         - obj:
+            scrollbar_mode: "OFF"
             styles: boot_bg
             widgets:
               - obj:
+                  scrollbar_mode: "OFF"
                   align: TOP_MID
                   translate_y: 40
                   width: 92
@@ -2058,6 +2403,7 @@ lvgl:
       widgets:
         - obj:
             styles: content
+            scrollbar_mode: "OFF"
             widgets:
               - label:
                   text_font: icon_font_14
@@ -2073,6 +2419,7 @@ lvgl:
                   translate_x: 30
                   translate_y: 8
               - obj:
+                  scrollbar_mode: "OFF"
                   styles: nav_bar
                   align: TOP_MID
                   translate_y: 28
@@ -2248,6 +2595,7 @@ lvgl:
                         translate_x: 36
                         width: 160
                         long_mode: SCROLL_CIRCULAR
+                        text_align: LEFT
               - obj:
                   styles: card
                   scrollbar_mode: "OFF"
@@ -2315,6 +2663,7 @@ lvgl:
       widgets:
         - obj:
             styles: content
+            scrollbar_mode: "OFF"
             width: 100%
             align: TOP_LEFT
             widgets:
@@ -2324,31 +2673,77 @@ lvgl:
                   align: TOP_MID
                   translate_y: 3
                   width: 94%
-                  height: 114
+                  height: 234
                   widgets:
                     - button:
                         id: mback
                         styles: glass_btn
                         align: TOP_LEFT
-                        translate_x: 10
-                        translate_y: 6
-                        width: 24
-                        height: 24
+                        translate_x: 12
+                        translate_y: 12
+                        width: 26
+                        height: 26
                         widgets:
                           - label:
-                              text_font: icon_font_14
+                              text_font: icon_font_20
                               text_color: 0xFFFFFF
                               text: "\U000F004D"
                         on_click:
                           - script.execute: go_home
-                    - label:
-                        id: np2_caption
-                        text_font: my_font10
-                        text_color: 0xE3B8D6
-                        text: "NOW PLAYING"
+                    - button:
+                        id: pop_on_btn
+                        styles: glass_btn
                         align: TOP_LEFT
-                        translate_x: 42
+                        translate_x: 48
                         translate_y: 12
+                        width: 92
+                        height: 26
+                        on_click:
+                          - lvgl.widget.show: dl_backdrop
+                          - lvgl.widget.hide: dl_pl
+                          - lvgl.widget.show: dl_on
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text_color: 0xFFFFFF
+                              text: "\U000F0502"
+                              align: LEFT_MID
+                              translate_x: 10
+                          - label:
+                              id: pop_on_label
+                              text_font: my_font10
+                              text_color: 0xFFFFFF
+                              text: "Play On"
+                              align: LEFT_MID
+                              translate_x: 30
+                              width: 56
+                              long_mode: DOT
+                              text_align: LEFT
+                    - button:
+                        id: pop_pl_btn
+                        styles: glass_btn
+                        align: TOP_LEFT
+                        translate_x: 152
+                        translate_y: 12
+                        width: 92
+                        height: 26
+                        on_click:
+                          - lvgl.widget.show: dl_backdrop
+                          - lvgl.widget.hide: dl_on
+                          - lvgl.widget.show: dl_pl
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text_color: 0xFFFFFF
+                              text: "\U000F040C"
+                              align: LEFT_MID
+                              translate_x: 10
+                          - label:
+                              text_font: my_font12
+                              text_color: 0xFFFFFF
+                              text: "Playlists"
+                              align: LEFT_MID
+                              translate_x: 30
                     - label:
                         id: np2_state
                         text_font: my_font10
@@ -2356,26 +2751,15 @@ lvgl:
                         text: " "
                         align: TOP_RIGHT
                         translate_x: -14
-                        translate_y: 12
+                        translate_y: 19
                     - obj:
-                        align: TOP_LEFT
-                        translate_x: 12
-                        translate_y: 36
-                        width: 276
-                        height: 1
-                        bg_color: 0xFFFFFF
-                        bg_opa: 18%
-                        border_width: 0
-                        radius: 0
-                        shadow_width: 0
-                        pad_all: 0
-                    - obj:
-                        align: TOP_LEFT
-                        translate_x: 12
-                        translate_y: 42
-                        width: 34
-                        height: 34
-                        radius: 8
+                        id: art_tile
+                        align: TOP_MID
+                        translate_y: 52
+                        width: 52
+                        height: 52
+                        radius: 14
+                        clip_corner: true
                         bg_color: 0xAE6FA0
                         bg_grad_color: 0x8A4F7E
                         bg_grad_dir: VER
@@ -2385,170 +2769,299 @@ lvgl:
                         border_width: 1
                         shadow_width: 0
                         pad_all: 0
+                        scrollbar_mode: "OFF"
+                        scroll_dir: "NONE"
                         widgets:
                           - label:
-                              text_font: icon_font_20
+                              id: art_icon
+                              text_font: icon_font_30
                               text_color: 0xFFFFFF
                               text: "\U000F075A"
+                          - image:
+                              id: art_img
+                              src: album_art
+                              hidden: true
                     - label:
                         id: np2_title
                         text_font: my_font14
                         text_color: 0xFFFFFF
                         text: " "
-                        align: TOP_LEFT
-                        translate_x: 56
-                        translate_y: 43
-                        width: 234
+                        align: TOP_MID
+                        translate_y: 114
+                        width: 272
                         long_mode: SCROLL_CIRCULAR
                     - label:
                         id: np2_artist
                         text_font: my_font12
                         text_color: 0xD6BED0
-                        text: " "
-                        align: TOP_LEFT
-                        translate_x: 56
-                        translate_y: 60
-                        width: 234
+                        text: ""
+                        align: TOP_MID
+                        translate_y: 133
+                        width: 272
                         long_mode: DOT
                     - button:
                         id: mprev
                         styles: glass_btn
                         align: TOP_LEFT
-                        translate_x: 48
-                        translate_y: 76
+                        translate_x: 34
+                        translate_y: 159
                         width: 34
                         height: 34
-                        widgets:
-                          - label:
-                              text_font: icon_font_20
-                              text_color: 0xFFFFFF
-                              text: "\U000F04AE"
                         on_click:
                           - homeassistant.action:
                               action: media_player.media_previous_track
                               data:
                                 entity_id: !lambda return id(g_media);
                           - script.execute: sync_media
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text_color: 0xFFFFFF
+                              text: "\U000F04AE"
                     - button:
                         id: mpp
                         styles: play_btn
                         align: TOP_LEFT
-                        translate_x: 90
-                        translate_y: 75
-                        width: 36
-                        height: 36
-                        widgets:
-                          - label:
-                              id: mpp_icon
-                              text_font: icon_font_24
-                              text_color: 0x0B1F33
-                              text: "\U000F040A"
+                        translate_x: 82
+                        translate_y: 156
+                        width: 38
+                        height: 38
                         on_click:
                           - homeassistant.action:
                               action: media_player.media_play_pause
                               data:
                                 entity_id: !lambda return id(g_media);
                           - script.execute: sync_media
+                        widgets:
+                          - label:
+                              id: mpp_icon
+                              text_font: icon_font_24
+                              text_color: 0x0B1F33
+                              text: "\U000F040A"
                     - button:
                         id: mnext
                         styles: glass_btn
                         align: TOP_LEFT
-                        translate_x: 134
-                        translate_y: 76
+                        translate_x: 136
+                        translate_y: 159
                         width: 34
                         height: 34
-                        widgets:
-                          - label:
-                              text_font: icon_font_20
-                              text_color: 0xFFFFFF
-                              text: "\U000F04AD"
                         on_click:
                           - homeassistant.action:
                               action: media_player.media_next_track
                               data:
                                 entity_id: !lambda return id(g_media);
                           - script.execute: sync_media
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text_color: 0xFFFFFF
+                              text: "\U000F04AD"
                     - button:
                         id: mfav
                         styles: glass_btn
                         hidden: true
                         align: TOP_LEFT
-                        translate_x: 176
-                        translate_y: 76
+                        translate_x: 184
+                        translate_y: 159
                         width: 34
                         height: 34
+                        on_click:
+                          - if:
+                              condition:
+                                lambda: |-
+                                  return !id(g_fav).empty() && id(g_fav) != "unknown" && id(g_fav) != "None";
+                              then:
+                                - homeassistant.action:
+                                    action: button.press
+                                    data:
+                                      entity_id: !lambda return id(g_fav);
+                          - lambda: |-
+                              if (id(g_fav_on) == "1") id(g_fav_on) = "0";
+                              else id(g_fav_on) = "1";
+                          - script.execute: update_media
                         widgets:
                           - label:
                               id: mfav_icon
                               text_font: icon_font_20
                               text_color: 0xD92BBC
                               text: "\U000F02D5"
-                        on_click:
-                          - if:
-                              condition:
-                                lambda: return !id(g_fav).empty() && id(g_fav) != "unknown" && id(g_fav) != "None";
-                              then:
-                                - homeassistant.action:
-                                    action: button.press
-                                    data:
-                                      entity_id: !lambda return id(g_fav);
-                                - lambda: |-
-                                    id(g_fav_on) = (id(g_fav_on) == "1") ? "0" : "1";
-                                - script.execute: update_media
                     - button:
                         id: mpwr
                         styles: power_btn
                         align: TOP_LEFT
-                        translate_x: 218
-                        translate_y: 76
+                        translate_x: 232
+                        translate_y: 159
                         width: 34
                         height: 34
+                        on_click:
+                          - homeassistant.action:
+                              action: !lambda |-
+                                if (id(g_st) == "off" || id(g_st) == "standby" || id(g_st) == "unavailable") return "media_player.turn_on";
+                                return "media_player.turn_off";
+                              data:
+                                entity_id: !lambda return id(g_media);
+                          - delay: 500ms
+                          - script.execute: sync_media
                         widgets:
                           - label:
                               text_font: icon_font_20
                               text_color: 0xFFFFFF
                               text: "\U000F0425"
+                    - label:
+                        id: vol_icon
+                        text_font: icon_font_14
+                        text_color: 0xFFFFFF
+                        text: "\U000F057E"
+                        align: TOP_LEFT
+                        translate_x: 16
+                        translate_y: 205
+                    - button:
+                        styles: glass_btn
+                        align: TOP_LEFT
+                        translate_x: 34
+                        translate_y: 202
+                        width: 24
+                        height: 24
                         on_click:
+                          - lambda: |-
+                              id(g_vol) = fmaxf(0.0f, id(g_vol) - 0.05f);
+                              id(g_vol_ms) = millis();
+                          - script.execute: update_vol_ui
                           - homeassistant.action:
-                              action: media_player.turn_off
+                              action: media_player.volume_set
                               data:
                                 entity_id: !lambda return id(g_media);
-                          - script.execute: sync_media
+                                volume_level: !lambda return id(g_vol);
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text_color: 0xFFFFFF
+                              text: "\U000F075E"
+                    - slider:
+                        id: vol_slider
+                        align: TOP_LEFT
+                        translate_x: 62
+                        translate_y: 205
+                        width: 152
+                        height: 14
+                        min_value: 0
+                        max_value: 100
+                        on_value:
+                          - lambda: |-
+                              char vb[8];
+                              snprintf(vb, sizeof(vb), "%d%%", (int)lv_slider_get_value(id(vol_slider)));
+                              lv_label_set_text(id(vol_pct), vb);
+                        on_release:
+                          - lambda: |-
+                              id(g_vol) = (float)lv_slider_get_value(id(vol_slider)) / 100.0f;
+                              id(g_vol_ms) = millis();
+                          - script.execute: update_vol_ui
+                          - homeassistant.action:
+                              action: media_player.volume_set
+                              data:
+                                entity_id: !lambda return id(g_media);
+                                volume_level: !lambda return id(g_vol);
+                    - button:
+                        styles: glass_btn
+                        align: TOP_LEFT
+                        translate_x: 222
+                        translate_y: 202
+                        width: 24
+                        height: 24
+                        on_click:
+                          - lambda: |-
+                              id(g_vol) = fminf(1.0f, id(g_vol) + 0.05f);
+                              id(g_vol_ms) = millis();
+                          - script.execute: update_vol_ui
+                          - homeassistant.action:
+                              action: media_player.volume_set
+                              data:
+                                entity_id: !lambda return id(g_media);
+                                volume_level: !lambda return id(g_vol);
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text_color: 0xFFFFFF
+                              text: "\U000F075D"
+                    - label:
+                        id: vol_pct
+                        text_font: my_font10
+                        text_color: 0xFFFFFF
+                        text: "0%"
+                        align: TOP_RIGHT
+                        translate_x: -12
+                        translate_y: 205
               - obj:
+                  scrollbar_mode: "OFF"
+                  id: dl_backdrop
+                  hidden: true
+                  align: TOP_LEFT
+                  width: 100%
+                  height: 100%
+                  bg_color: 0x000000
+                  bg_opa: 45%
+                  border_width: 0
+                  radius: 0
+                  shadow_width: 0
+                  pad_all: 0
+                  on_click:
+                    - lvgl.widget.hide: dl_backdrop
+                    - lvgl.widget.hide: dl_on
+                    - lvgl.widget.hide: dl_pl
+              - obj:
+                  id: dl_on
                   styles: card
                   scrollbar_mode: "OFF"
-                  align: TOP_MID
-                  translate_y: 121
-                  width: 94%
-                  height: 54
+                  hidden: true
+                  align: CENTER
+                  width: 92%
+                  height: 190
                   widgets:
                     - label:
+                        text_font: my_font14
+                        text_color: 0x4A1F45
                         text: "Play On"
-                        styles: txt_purple
                         align: TOP_LEFT
-                        translate_x: 14
-                        translate_y: 2
+                        translate_x: 16
+                        translate_y: 14
+                    - button:
+                        styles: scroll_btn
+                        align: TOP_RIGHT
+                        translate_x: -14
+                        translate_y: 12
+                        width: 28
+                        height: 28
+                        on_click:
+                          - lvgl.widget.hide: dl_backdrop
+                          - lvgl.widget.hide: dl_on
+                          - lvgl.widget.hide: dl_pl
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text_color: 0x4A1F45
+                              text: "\U000F0156"
                     - obj:
                         id: dev_scroll
                         align: TOP_LEFT
-                        translate_x: 8
-                        translate_y: 18
-                        width: 284
-                        height: 32
+                        translate_x: 16
+                        translate_y: 48
+                        width: 216
+                        height: 124
                         bg_opa: TRANSP
                         border_width: 0
                         radius: 0
                         shadow_width: 0
                         pad_all: 0
-                        scroll_dir: VER
+                        scroll_dir: "VER"
                         scrollbar_mode: "ON"
                         scroll_chain_ver: true
                         scroll_momentum: true
                         scroll_elastic: true
                         scrollbar:
-                          bg_color: 0xFFFFFF
-                          bg_opa: 60%
-                          width: 5
+                          bg_color: 0x9C6091
+                          bg_opa: 50%
+                          width: 6
                           radius: 3
                           pad_right: 2
                           pad_top: 2
@@ -2561,8 +3074,15 @@ lvgl:
                               align: TOP_LEFT
                               translate_x: 0
                               translate_y: 0
-                              width: 130
-                              height: 15
+                              width: 200
+                              height: 18
+                              on_click:
+                                - lambda: id(g_media) = id(g_d1);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
                               widgets:
                                 - label:
                                     id: dev1_icon
@@ -2573,27 +3093,30 @@ lvgl:
                                     translate_x: 6
                                 - label:
                                     id: dev1_name
-                                    text_font: my_font10
+                                    text_font: my_font12
                                     text_color: 0xFFFFFF
                                     text: "--"
                                     align: LEFT_MID
-                                    translate_x: 20
-                                    width: 102
+                                    translate_x: 24
+                                    width: 165
                                     long_mode: DOT
-                              on_click:
-                                - lambda: |-
-                                    id(g_media) = id(g_d1);
-                                - script.execute: update_media
-                                - script.execute: sync_media
+                                    text_align: LEFT
                           - button:
                               id: dev2_btn
                               styles: tile
                               checkable: true
                               align: TOP_LEFT
-                              translate_x: 142
-                              translate_y: 0
-                              width: 130
-                              height: 15
+                              translate_x: 0
+                              translate_y: 20
+                              width: 200
+                              height: 18
+                              on_click:
+                                - lambda: id(g_media) = id(g_d2);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
                               widgets:
                                 - label:
                                     id: dev2_icon
@@ -2604,27 +3127,30 @@ lvgl:
                                     translate_x: 6
                                 - label:
                                     id: dev2_name
-                                    text_font: my_font10
+                                    text_font: my_font12
                                     text_color: 0xFFFFFF
                                     text: "--"
                                     align: LEFT_MID
-                                    translate_x: 20
-                                    width: 102
+                                    translate_x: 24
+                                    width: 165
                                     long_mode: DOT
-                              on_click:
-                                - lambda: |-
-                                    id(g_media) = id(g_d2);
-                                - script.execute: update_media
-                                - script.execute: sync_media
+                                    text_align: LEFT
                           - button:
                               id: dev3_btn
                               styles: tile
                               checkable: true
                               align: TOP_LEFT
                               translate_x: 0
-                              translate_y: 17
-                              width: 130
-                              height: 15
+                              translate_y: 40
+                              width: 200
+                              height: 18
+                              on_click:
+                                - lambda: id(g_media) = id(g_d3);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
                               widgets:
                                 - label:
                                     id: dev3_icon
@@ -2635,27 +3161,30 @@ lvgl:
                                     translate_x: 6
                                 - label:
                                     id: dev3_name
-                                    text_font: my_font10
+                                    text_font: my_font12
                                     text_color: 0xFFFFFF
                                     text: "--"
                                     align: LEFT_MID
-                                    translate_x: 20
-                                    width: 102
+                                    translate_x: 24
+                                    width: 165
                                     long_mode: DOT
-                              on_click:
-                                - lambda: |-
-                                    id(g_media) = id(g_d3);
-                                - script.execute: update_media
-                                - script.execute: sync_media
+                                    text_align: LEFT
                           - button:
                               id: dev4_btn
                               styles: tile
                               checkable: true
                               align: TOP_LEFT
-                              translate_x: 142
-                              translate_y: 17
-                              width: 130
-                              height: 15
+                              translate_x: 0
+                              translate_y: 60
+                              width: 200
+                              height: 18
+                              on_click:
+                                - lambda: id(g_media) = id(g_d4);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
                               widgets:
                                 - label:
                                     id: dev4_icon
@@ -2666,28 +3195,31 @@ lvgl:
                                     translate_x: 6
                                 - label:
                                     id: dev4_name
-                                    text_font: my_font10
+                                    text_font: my_font12
                                     text_color: 0xFFFFFF
                                     text: "--"
                                     align: LEFT_MID
-                                    translate_x: 20
-                                    width: 102
+                                    translate_x: 24
+                                    width: 165
                                     long_mode: DOT
-                              on_click:
-                                - lambda: |-
-                                    id(g_media) = id(g_d4);
-                                - script.execute: update_media
-                                - script.execute: sync_media
+                                    text_align: LEFT
                           - button:
                               id: dev5_btn
                               styles: tile
                               checkable: true
-                              hidden: true
                               align: TOP_LEFT
                               translate_x: 0
-                              translate_y: 34
-                              width: 130
-                              height: 15
+                              translate_y: 80
+                              hidden: true
+                              width: 200
+                              height: 18
+                              on_click:
+                                - lambda: id(g_media) = id(g_d5);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
                               widgets:
                                 - label:
                                     id: dev5_icon
@@ -2698,28 +3230,31 @@ lvgl:
                                     translate_x: 6
                                 - label:
                                     id: dev5_name
-                                    text_font: my_font10
+                                    text_font: my_font12
                                     text_color: 0xFFFFFF
                                     text: "--"
                                     align: LEFT_MID
-                                    translate_x: 20
-                                    width: 102
+                                    translate_x: 24
+                                    width: 165
                                     long_mode: DOT
-                              on_click:
-                                - lambda: |-
-                                    id(g_media) = id(g_d5);
-                                - script.execute: update_media
-                                - script.execute: sync_media
+                                    text_align: LEFT
                           - button:
                               id: dev6_btn
                               styles: tile
                               checkable: true
-                              hidden: true
                               align: TOP_LEFT
-                              translate_x: 142
-                              translate_y: 34
-                              width: 130
-                              height: 15
+                              translate_x: 0
+                              translate_y: 100
+                              hidden: true
+                              width: 200
+                              height: 18
+                              on_click:
+                                - lambda: id(g_media) = id(g_d6);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
                               widgets:
                                 - label:
                                     id: dev6_icon
@@ -2730,28 +3265,31 @@ lvgl:
                                     translate_x: 6
                                 - label:
                                     id: dev6_name
-                                    text_font: my_font10
+                                    text_font: my_font12
                                     text_color: 0xFFFFFF
                                     text: "--"
                                     align: LEFT_MID
-                                    translate_x: 20
-                                    width: 102
+                                    translate_x: 24
+                                    width: 165
                                     long_mode: DOT
-                              on_click:
-                                - lambda: |-
-                                    id(g_media) = id(g_d6);
-                                - script.execute: update_media
-                                - script.execute: sync_media
+                                    text_align: LEFT
                           - button:
                               id: dev7_btn
                               styles: tile
                               checkable: true
-                              hidden: true
                               align: TOP_LEFT
                               translate_x: 0
-                              translate_y: 51
-                              width: 130
-                              height: 15
+                              translate_y: 120
+                              hidden: true
+                              width: 200
+                              height: 18
+                              on_click:
+                                - lambda: id(g_media) = id(g_d7);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
                               widgets:
                                 - label:
                                     id: dev7_icon
@@ -2762,28 +3300,31 @@ lvgl:
                                     translate_x: 6
                                 - label:
                                     id: dev7_name
-                                    text_font: my_font10
+                                    text_font: my_font12
                                     text_color: 0xFFFFFF
                                     text: "--"
                                     align: LEFT_MID
-                                    translate_x: 20
-                                    width: 102
+                                    translate_x: 24
+                                    width: 165
                                     long_mode: DOT
-                              on_click:
-                                - lambda: |-
-                                    id(g_media) = id(g_d7);
-                                - script.execute: update_media
-                                - script.execute: sync_media
+                                    text_align: LEFT
                           - button:
                               id: dev8_btn
                               styles: tile
                               checkable: true
-                              hidden: true
                               align: TOP_LEFT
-                              translate_x: 142
-                              translate_y: 51
-                              width: 130
-                              height: 15
+                              translate_x: 0
+                              translate_y: 140
+                              hidden: true
+                              width: 200
+                              height: 18
+                              on_click:
+                                - lambda: id(g_media) = id(g_d8);
+                                - script.execute: update_media
+                                - script.execute: sync_media
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
                               widgets:
                                 - label:
                                     id: dev8_icon
@@ -2794,54 +3335,95 @@ lvgl:
                                     translate_x: 6
                                 - label:
                                     id: dev8_name
-                                    text_font: my_font10
+                                    text_font: my_font12
                                     text_color: 0xFFFFFF
                                     text: "--"
                                     align: LEFT_MID
-                                    translate_x: 20
-                                    width: 102
+                                    translate_x: 24
+                                    width: 165
                                     long_mode: DOT
-                              on_click:
-                                - lambda: |-
-                                    id(g_media) = id(g_d8);
-                                - script.execute: update_media
-                                - script.execute: sync_media
+                                    text_align: LEFT
+                    - button:
+                        styles: scroll_btn
+                        align: TOP_LEFT
+                        translate_x: 244
+                        translate_y: 48
+                        width: 32
+                        height: 58
+                        on_click:
+                          - lambda: lv_obj_scroll_by(id(dev_scroll), 0, -40, LV_ANIM_ON);
+                        widgets:
+                          - label:
+                              text_font: icon_font_24
+                              text_color: 0x4A1F45
+                              text: "\U000F0143"
+                    - button:
+                        styles: scroll_btn
+                        align: TOP_LEFT
+                        translate_x: 244
+                        translate_y: 112
+                        width: 32
+                        height: 58
+                        on_click:
+                          - lambda: lv_obj_scroll_by(id(dev_scroll), 0, 40, LV_ANIM_ON);
+                        widgets:
+                          - label:
+                              text_font: icon_font_24
+                              text_color: 0x4A1F45
+                              text: "\U000F0140"
               - obj:
-                  id: pl_card
+                  id: dl_pl
                   styles: card
                   scrollbar_mode: "OFF"
-                  align: TOP_MID
-                  translate_y: 178
-                  width: 94%
-                  height: 60
+                  hidden: true
+                  align: CENTER
+                  width: 92%
+                  height: 190
                   widgets:
                     - label:
+                        text_font: my_font14
+                        text_color: 0x4A1F45
                         text: "Playlists"
-                        styles: txt_purple
                         align: TOP_LEFT
-                        translate_x: 14
-                        translate_y: 2
+                        translate_x: 16
+                        translate_y: 14
+                    - button:
+                        styles: scroll_btn
+                        align: TOP_RIGHT
+                        translate_x: -14
+                        translate_y: 12
+                        width: 28
+                        height: 28
+                        on_click:
+                          - lvgl.widget.hide: dl_backdrop
+                          - lvgl.widget.hide: dl_on
+                          - lvgl.widget.hide: dl_pl
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text_color: 0x4A1F45
+                              text: "\U000F0156"
                     - obj:
                         id: pl_scroll
                         align: TOP_LEFT
-                        translate_x: 8
-                        translate_y: 18
-                        width: 284
-                        height: 36
+                        translate_x: 16
+                        translate_y: 48
+                        width: 216
+                        height: 124
                         bg_opa: TRANSP
                         border_width: 0
                         radius: 0
                         shadow_width: 0
                         pad_all: 0
-                        scroll_dir: VER
+                        scroll_dir: "VER"
                         scrollbar_mode: "ON"
                         scroll_chain_ver: true
                         scroll_momentum: true
                         scroll_elastic: true
                         scrollbar:
-                          bg_color: 0xFFFFFF
-                          bg_opa: 60%
-                          width: 5
+                          bg_color: 0x9C6091
+                          bg_opa: 50%
+                          width: 6
                           radius: 3
                           pad_right: 2
                           pad_top: 2
@@ -2851,28 +3433,15 @@ lvgl:
                               id: pl1_btn
                               styles: list_row
                               align: TOP_LEFT
+                              translate_x: 0
                               translate_y: 0
-                              width: 272
-                              height: 15
-                              widgets:
-                                - label:
-                                    text_font: icon_font_12
-                                    text: "\U000F040C"
-                                    align: LEFT_MID
-                                    translate_x: 8
-                                - label:
-                                    id: pl1_label
-                                    text_font: my_font10
-                                    styles: txt_purple
-                                    text: " "
-                                    align: LEFT_MID
-                                    translate_x: 24
-                                    width: 240
-                                    long_mode: DOT
+                              width: 200
+                              height: 18
                               on_click:
                                 - if:
                                     condition:
-                                      lambda: return !id(g_u1).empty() && id(g_u1) != "unknown" && id(g_u1) != "None";
+                                      lambda: |-
+                                        return !id(g_u1).empty() && id(g_u1) != "unknown" && id(g_u1) != "None";
                                     then:
                                       - homeassistant.action:
                                           action: music_assistant.play_media
@@ -2880,32 +3449,39 @@ lvgl:
                                             media_id: !lambda return id(g_u1);
                                             media_type: playlist
                                             entity_id: !lambda return id(g_media);
-                          - button:
-                              id: pl2_btn
-                              styles: list_row
-                              align: TOP_LEFT
-                              translate_y: 17
-                              width: 272
-                              height: 15
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
                               widgets:
                                 - label:
                                     text_font: icon_font_12
+                                    text_color: 0x4A1F45
                                     text: "\U000F040C"
                                     align: LEFT_MID
                                     translate_x: 8
                                 - label:
-                                    id: pl2_label
-                                    text_font: my_font10
-                                    styles: txt_purple
-                                    text: " "
+                                    id: pl1_label
+                                    text_font: my_font12
+                                    text_color: 0x4A1F45
+                                    text: ""
                                     align: LEFT_MID
                                     translate_x: 24
-                                    width: 240
+                                    width: 170
                                     long_mode: DOT
+                                    text_align: LEFT
+                          - button:
+                              id: pl2_btn
+                              styles: list_row
+                              align: TOP_LEFT
+                              translate_x: 0
+                              translate_y: 20
+                              width: 200
+                              height: 18
                               on_click:
                                 - if:
                                     condition:
-                                      lambda: return !id(g_u2).empty() && id(g_u2) != "unknown" && id(g_u2) != "None";
+                                      lambda: |-
+                                        return !id(g_u2).empty() && id(g_u2) != "unknown" && id(g_u2) != "None";
                                     then:
                                       - homeassistant.action:
                                           action: music_assistant.play_media
@@ -2913,32 +3489,39 @@ lvgl:
                                             media_id: !lambda return id(g_u2);
                                             media_type: playlist
                                             entity_id: !lambda return id(g_media);
-                          - button:
-                              id: pl3_btn
-                              styles: list_row
-                              align: TOP_LEFT
-                              translate_y: 34
-                              width: 272
-                              height: 15
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
                               widgets:
                                 - label:
                                     text_font: icon_font_12
+                                    text_color: 0x4A1F45
                                     text: "\U000F040C"
                                     align: LEFT_MID
                                     translate_x: 8
                                 - label:
-                                    id: pl3_label
-                                    text_font: my_font10
-                                    styles: txt_purple
-                                    text: " "
+                                    id: pl2_label
+                                    text_font: my_font12
+                                    text_color: 0x4A1F45
+                                    text: ""
                                     align: LEFT_MID
                                     translate_x: 24
-                                    width: 240
+                                    width: 170
                                     long_mode: DOT
+                                    text_align: LEFT
+                          - button:
+                              id: pl3_btn
+                              styles: list_row
+                              align: TOP_LEFT
+                              translate_x: 0
+                              translate_y: 40
+                              width: 200
+                              height: 18
                               on_click:
                                 - if:
                                     condition:
-                                      lambda: return !id(g_u3).empty() && id(g_u3) != "unknown" && id(g_u3) != "None";
+                                      lambda: |-
+                                        return !id(g_u3).empty() && id(g_u3) != "unknown" && id(g_u3) != "None";
                                     then:
                                       - homeassistant.action:
                                           action: music_assistant.play_media
@@ -2946,33 +3529,40 @@ lvgl:
                                             media_id: !lambda return id(g_u3);
                                             media_type: playlist
                                             entity_id: !lambda return id(g_media);
-                          - button:
-                              id: pl4_btn
-                              styles: list_row
-                              hidden: true
-                              align: TOP_LEFT
-                              translate_y: 51
-                              width: 272
-                              height: 15
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
                               widgets:
                                 - label:
                                     text_font: icon_font_12
+                                    text_color: 0x4A1F45
                                     text: "\U000F040C"
                                     align: LEFT_MID
                                     translate_x: 8
                                 - label:
-                                    id: pl4_label
-                                    text_font: my_font10
-                                    styles: txt_purple
-                                    text: " "
+                                    id: pl3_label
+                                    text_font: my_font12
+                                    text_color: 0x4A1F45
+                                    text: ""
                                     align: LEFT_MID
                                     translate_x: 24
-                                    width: 240
+                                    width: 170
                                     long_mode: DOT
+                                    text_align: LEFT
+                          - button:
+                              id: pl4_btn
+                              styles: list_row
+                              align: TOP_LEFT
+                              translate_x: 0
+                              translate_y: 60
+                              hidden: true
+                              width: 200
+                              height: 18
                               on_click:
                                 - if:
                                     condition:
-                                      lambda: return !id(g_u4).empty() && id(g_u4) != "unknown" && id(g_u4) != "None";
+                                      lambda: |-
+                                        return !id(g_u4).empty() && id(g_u4) != "unknown" && id(g_u4) != "None";
                                     then:
                                       - homeassistant.action:
                                           action: music_assistant.play_media
@@ -2980,33 +3570,40 @@ lvgl:
                                             media_id: !lambda return id(g_u4);
                                             media_type: playlist
                                             entity_id: !lambda return id(g_media);
-                          - button:
-                              id: pl5_btn
-                              styles: list_row
-                              hidden: true
-                              align: TOP_LEFT
-                              translate_y: 68
-                              width: 272
-                              height: 15
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
                               widgets:
                                 - label:
                                     text_font: icon_font_12
+                                    text_color: 0x4A1F45
                                     text: "\U000F040C"
                                     align: LEFT_MID
                                     translate_x: 8
                                 - label:
-                                    id: pl5_label
-                                    text_font: my_font10
-                                    styles: txt_purple
-                                    text: " "
+                                    id: pl4_label
+                                    text_font: my_font12
+                                    text_color: 0x4A1F45
+                                    text: ""
                                     align: LEFT_MID
                                     translate_x: 24
-                                    width: 240
+                                    width: 170
                                     long_mode: DOT
+                                    text_align: LEFT
+                          - button:
+                              id: pl5_btn
+                              styles: list_row
+                              align: TOP_LEFT
+                              translate_x: 0
+                              translate_y: 80
+                              hidden: true
+                              width: 200
+                              height: 18
                               on_click:
                                 - if:
                                     condition:
-                                      lambda: return !id(g_u5).empty() && id(g_u5) != "unknown" && id(g_u5) != "None";
+                                      lambda: |-
+                                        return !id(g_u5).empty() && id(g_u5) != "unknown" && id(g_u5) != "None";
                                     then:
                                       - homeassistant.action:
                                           action: music_assistant.play_media
@@ -3014,33 +3611,40 @@ lvgl:
                                             media_id: !lambda return id(g_u5);
                                             media_type: playlist
                                             entity_id: !lambda return id(g_media);
-                          - button:
-                              id: pl6_btn
-                              styles: list_row
-                              hidden: true
-                              align: TOP_LEFT
-                              translate_y: 85
-                              width: 272
-                              height: 15
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
                               widgets:
                                 - label:
                                     text_font: icon_font_12
+                                    text_color: 0x4A1F45
                                     text: "\U000F040C"
                                     align: LEFT_MID
                                     translate_x: 8
                                 - label:
-                                    id: pl6_label
-                                    text_font: my_font10
-                                    styles: txt_purple
-                                    text: " "
+                                    id: pl5_label
+                                    text_font: my_font12
+                                    text_color: 0x4A1F45
+                                    text: ""
                                     align: LEFT_MID
                                     translate_x: 24
-                                    width: 240
+                                    width: 170
                                     long_mode: DOT
+                                    text_align: LEFT
+                          - button:
+                              id: pl6_btn
+                              styles: list_row
+                              align: TOP_LEFT
+                              translate_x: 0
+                              translate_y: 100
+                              hidden: true
+                              width: 200
+                              height: 18
                               on_click:
                                 - if:
                                     condition:
-                                      lambda: return !id(g_u6).empty() && id(g_u6) != "unknown" && id(g_u6) != "None";
+                                      lambda: |-
+                                        return !id(g_u6).empty() && id(g_u6) != "unknown" && id(g_u6) != "None";
                                     then:
                                       - homeassistant.action:
                                           action: music_assistant.play_media
@@ -3048,12 +3652,60 @@ lvgl:
                                             media_id: !lambda return id(g_u6);
                                             media_type: playlist
                                             entity_id: !lambda return id(g_media);
-
+                                - lvgl.widget.hide: dl_backdrop
+                                - lvgl.widget.hide: dl_on
+                                - lvgl.widget.hide: dl_pl
+                              widgets:
+                                - label:
+                                    text_font: icon_font_12
+                                    text_color: 0x4A1F45
+                                    text: "\U000F040C"
+                                    align: LEFT_MID
+                                    translate_x: 8
+                                - label:
+                                    id: pl6_label
+                                    text_font: my_font12
+                                    text_color: 0x4A1F45
+                                    text: ""
+                                    align: LEFT_MID
+                                    translate_x: 24
+                                    width: 170
+                                    long_mode: DOT
+                                    text_align: LEFT
+                    - button:
+                        styles: scroll_btn
+                        align: TOP_LEFT
+                        translate_x: 244
+                        translate_y: 48
+                        width: 32
+                        height: 58
+                        on_click:
+                          - lambda: lv_obj_scroll_by(id(pl_scroll), 0, -40, LV_ANIM_ON);
+                        widgets:
+                          - label:
+                              text_font: icon_font_24
+                              text_color: 0x4A1F45
+                              text: "\U000F0143"
+                    - button:
+                        styles: scroll_btn
+                        align: TOP_LEFT
+                        translate_x: 244
+                        translate_y: 112
+                        width: 32
+                        height: 58
+                        on_click:
+                          - lambda: lv_obj_scroll_by(id(pl_scroll), 0, 40, LV_ANIM_ON);
+                        widgets:
+                          - label:
+                              text_font: icon_font_24
+                              text_color: 0x4A1F45
+                              text: "\U000F0140"
 
     - id: weather_page
       widgets:
         - obj:
             styles: content
+            scrollbar_mode: "OFF"
             widgets:
               - label:
                   text: "Forecast"
@@ -3210,6 +3862,7 @@ lvgl:
       widgets:
         - obj:
             styles: content
+            scrollbar_mode: "OFF"
             widgets:
               - obj:
                   styles: card
@@ -3251,7 +3904,7 @@ lvgl:
                     - button:
                         id: ds_minus
                         align: TOP_LEFT
-                        translate_x: 104
+                        translate_x: 82
                         translate_y: 30
                         width: 30
                         height: 30
@@ -3274,12 +3927,12 @@ lvgl:
                         text: " "
                         width: 36
                         align: TOP_LEFT
-                        translate_x: 136
+                        translate_x: 120
                         translate_y: 36
                     - button:
                         id: ds_plus
                         align: TOP_LEFT
-                        translate_x: 172
+                        translate_x: 164
                         translate_y: 30
                         width: 30
                         height: 30
@@ -3401,7 +4054,7 @@ lvgl:
                     - button:
                         id: us_minus
                         align: TOP_LEFT
-                        translate_x: 104
+                        translate_x: 82
                         translate_y: 30
                         width: 30
                         height: 30
@@ -3424,12 +4077,12 @@ lvgl:
                         text: " "
                         width: 36
                         align: TOP_LEFT
-                        translate_x: 136
+                        translate_x: 120
                         translate_y: 36
                     - button:
                         id: us_plus
                         align: TOP_LEFT
-                        translate_x: 172
+                        translate_x: 164
                         translate_y: 30
                         width: 30
                         height: 30
@@ -3504,6 +4157,7 @@ lvgl:
       widgets:
         - obj:
             styles: content
+            scrollbar_mode: "OFF"
             widgets:
               - obj:
                   styles: hero
@@ -3623,18 +4277,75 @@ lvgl:
                         align: TOP_MID
                         translate_y: 66
 
+    - id: saver_page
+      widgets:
+        - obj:
+            scrollbar_mode: "OFF"
+            styles: boot_bg
+            widgets:
+              - label:
+                  id: saver_time
+                  text_font: clock_font48
+                  text_color: 0xFFFFFF
+                  text: "--:--"
+                  align: TOP_MID
+                  translate_y: 30
+              - label:
+                  id: saver_ampm
+                  text_font: my_font14
+                  text_color: 0xD6BED0
+                  text: " "
+                  align: TOP_MID
+                  translate_y: 96
+              - label:
+                  id: saver_day
+                  text_font: my_font14
+                  text_color: 0xFFFFFF
+                  text: " "
+                  align: TOP_MID
+                  translate_y: 120
+              - label:
+                  id: saver_date
+                  text_font: my_font12
+                  text_color: 0xD6BED0
+                  text: " "
+                  align: TOP_MID
+                  translate_y: 142
+              - label:
+                  id: saver_np
+                  text_font: my_font12
+                  text_color: 0xD6BED0
+                  text: " "
+                  width: 280
+                  long_mode: DOT
+                  align: TOP_MID
+                  translate_y: 176
+              - label:
+                  id: saver_temp
+                  text_font: my_font14
+                  text_color: 0xFFFFFF
+                  text: " "
+                  align: TOP_MID
+                  translate_y: 198
+              - label:
+                  text: "Touch to wake"
+                  text_font: my_font8
+                  text_color: 0xD6BED0
+                  align: BOTTOM_MID
+                  translate_y: -8
     - id: settings_page
       widgets:
         - obj:
             styles: content
+            scrollbar_mode: "OFF"
             widgets:
               - obj:
                   styles: card
                   scrollbar_mode: "OFF"
                   align: TOP_MID
-                  translate_y: 4
+                  translate_y: 2
                   width: 94%
-                  height: 19%
+                  height: 26%
                   widgets:
                     - label:
                         text_font: icon_font_20
@@ -3642,13 +4353,13 @@ lvgl:
                         text: "\U000F00DF"
                         align: TOP_LEFT
                         translate_x: 12
-                        translate_y: 4
+                        translate_y: 3
                     - label:
-                        text: "Display"
+                        text: "Display & Clock"
                         styles: txt_purple
                         align: TOP_LEFT
                         translate_x: 38
-                        translate_y: 4
+                        translate_y: 3
                     - slider:
                         id: screen_slider
                         min_value: 10
@@ -3658,18 +4369,34 @@ lvgl:
                         height: 16
                         align: TOP_LEFT
                         translate_x: 38
-                        translate_y: 21
+                        translate_y: 18
                         on_value:
                           - light.turn_on:
                               id: backlight
                               brightness: !lambda return x / 100.0f;
+                    - button:
+                        id: ck_open
+                        styles: tile
+                        align: TOP_LEFT
+                        translate_x: 38
+                        translate_y: 38
+                        width: 130
+                        height: 20
+                        widgets:
+                          - label:
+                              text_font: my_font10
+                              text: "Clock & Sleep"
+                        on_click:
+                          - lvgl.widget.show: ck_backdrop
+                          - lvgl.widget.show: ck_dlg
+                          - script.execute: update_clock_ui
               - obj:
                   styles: card
                   scrollbar_mode: "OFF"
                   align: TOP_MID
-                  translate_y: 54
+                  translate_y: 69
                   width: 94%
-                  height: 19%
+                  height: 18%
                   widgets:
                     - label:
                         text_font: icon_font_20
@@ -3677,18 +4404,18 @@ lvgl:
                         text: "\U000F1051"
                         align: TOP_LEFT
                         translate_x: 12
-                        translate_y: 6
+                        translate_y: 3
                     - label:
                         text: "Case LED"
                         styles: txt_purple
                         align: TOP_LEFT
                         translate_x: 38
-                        translate_y: 7
+                        translate_y: 4
                     - switch:
                         id: led_switch
                         align: TOP_RIGHT
                         translate_x: -14
-                        translate_y: 6
+                        translate_y: 3
                         on_value:
                           - if:
                               condition:
@@ -3703,9 +4430,9 @@ lvgl:
                   styles: card
                   scrollbar_mode: "OFF"
                   align: TOP_MID
-                  translate_y: 103
+                  translate_y: 116
                   width: 94%
-                  height: 21%
+                  height: 18%
                   widgets:
                     - label:
                         text_font: icon_font_20
@@ -3713,22 +4440,22 @@ lvgl:
                         text: "\U000F050F"
                         align: TOP_LEFT
                         translate_x: 12
-                        translate_y: 6
+                        translate_y: 3
                     - label:
                         text: "Units"
                         styles: txt_purple
                         align: TOP_LEFT
                         translate_x: 38
-                        translate_y: 6
+                        translate_y: 3
                     - button:
                         id: unit_f
                         styles: tile
                         checkable: true
                         align: TOP_LEFT
                         translate_x: 108
-                        translate_y: 20
+                        translate_y: 16
                         width: 46
-                        height: 24
+                        height: 22
                         widgets:
                           - label:
                               text_font: my_font12
@@ -3743,9 +4470,9 @@ lvgl:
                         checkable: true
                         align: TOP_LEFT
                         translate_x: 156
-                        translate_y: 20
+                        translate_y: 16
                         width: 46
-                        height: 24
+                        height: 22
                         widgets:
                           - label:
                               text_font: my_font12
@@ -3758,9 +4485,9 @@ lvgl:
                   styles: card
                   scrollbar_mode: "OFF"
                   align: TOP_MID
-                  translate_y: 158
+                  translate_y: 163
                   width: 94%
-                  height: 33%
+                  height: 30%
                   widgets:
                     - label:
                         text_font: icon_font_20
@@ -3768,13 +4495,13 @@ lvgl:
                         text: "\U000F05A9"
                         align: TOP_LEFT
                         translate_x: 12
-                        translate_y: 6
+                        translate_y: 3
                     - label:
                         text: "System"
                         styles: txt_purple
                         align: TOP_LEFT
                         translate_x: 38
-                        translate_y: 7
+                        translate_y: 4
                     - label:
                         id: sys_build
                         text_font: my_font10
@@ -3786,7 +4513,7 @@ lvgl:
                           return "Build " + s.substr(5, 11);
                         align: TOP_RIGHT
                         translate_x: -12
-                        translate_y: 7
+                        translate_y: 4
                     - label:
                         id: sys_ip
                         text_font: my_font12
@@ -3794,7 +4521,7 @@ lvgl:
                         text: " "
                         align: TOP_LEFT
                         translate_x: 14
-                        translate_y: 26
+                        translate_y: 20
                     - label:
                         id: sys_wifi
                         text_font: my_font12
@@ -3802,7 +4529,7 @@ lvgl:
                         text: " "
                         align: TOP_LEFT
                         translate_x: 14
-                        translate_y: 42
+                        translate_y: 36
                     - label:
                         id: sys_uptime
                         text_font: my_font12
@@ -3810,4 +4537,221 @@ lvgl:
                         text: " "
                         align: TOP_LEFT
                         translate_x: 14
-                        translate_y: 58
+                        translate_y: 52
+              - obj:
+                  id: ck_backdrop
+                  hidden: true
+                  scrollbar_mode: "OFF"
+                  align: TOP_LEFT
+                  width: 100%
+                  height: 100%
+                  bg_color: 0x000000
+                  bg_opa: 45%
+                  border_width: 0
+                  radius: 0
+                  shadow_width: 0
+                  pad_all: 0
+                  on_click:
+                    - lvgl.widget.hide: ck_backdrop
+                    - lvgl.widget.hide: ck_dlg
+              - obj:
+                  id: ck_dlg
+                  styles: card
+                  scrollbar_mode: "OFF"
+                  hidden: true
+                  align: CENTER
+                  width: 94%
+                  height: 208
+                  widgets:
+                    - label:
+                        text: "Clock & Sleep"
+                        text_font: my_font14
+                        text_color: 0x4A1F45
+                        align: TOP_LEFT
+                        translate_x: 16
+                        translate_y: 16
+                    - button:
+                        styles: scroll_btn
+                        align: TOP_RIGHT
+                        translate_x: -14
+                        translate_y: 14
+                        width: 28
+                        height: 28
+                        widgets:
+                          - label:
+                              text_font: icon_font_20
+                              text_color: 0x4A1F45
+                              text: "\U000F0156"
+                        on_click:
+                          - lvgl.widget.hide: ck_backdrop
+                          - lvgl.widget.hide: ck_dlg
+                    - obj:
+                        scrollbar_mode: "OFF"
+                        align: TOP_LEFT
+                        translate_x: 16
+                        translate_y: 50
+                        width: 172
+                        height: 1
+                        bg_color: 0xE0D2E8
+                        bg_opa: COVER
+                        border_width: 0
+                        radius: 0
+                        shadow_width: 0
+                        pad_all: 0
+                    - label:
+                        text: "Clock"
+                        text_font: my_font12
+                        text_color: 0x4A1F45
+                        align: TOP_LEFT
+                        translate_x: 16
+                        translate_y: 62
+                    - button:
+                        id: clock12
+                        styles: tile
+                        checkable: true
+                        align: TOP_LEFT
+                        translate_x: 92
+                        translate_y: 56
+                        width: 46
+                        height: 24
+                        widgets:
+                          - label:
+                              text_font: my_font12
+                              text: "12h"
+                        on_click:
+                          - lambda: |-
+                              id(g_clock24) = "0";
+                          - script.execute: update_clock_ui
+                    - button:
+                        id: clock24
+                        styles: tile
+                        checkable: true
+                        align: TOP_LEFT
+                        translate_x: 142
+                        translate_y: 56
+                        width: 46
+                        height: 24
+                        widgets:
+                          - label:
+                              text_font: my_font12
+                              text: "24h"
+                        on_click:
+                          - lambda: |-
+                              id(g_clock24) = "1";
+                          - script.execute: update_clock_ui
+                    - label:
+                        text: "Sleep start"
+                        text_font: my_font12
+                        text_color: 0x4A1F45
+                        align: TOP_LEFT
+                        translate_x: 16
+                        translate_y: 100
+                    - button:
+                        styles: tile
+                        align: TOP_LEFT
+                        translate_x: 84
+                        translate_y: 94
+                        width: 26
+                        height: 26
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text: "\U000F0374"
+                        on_click:
+                          - lambda: |-
+                              int v = atoi(id(g_sleep_start).c_str());
+                              v = (v + 23) % 24;
+                              char b[4];
+                              snprintf(b, sizeof(b), "%d", v);
+                              id(g_sleep_start) = b;
+                          - script.execute: update_clock_ui
+                    - label:
+                        id: ck_start_lbl
+                        text_font: my_font14
+                        text_color: 0x4A1F45
+                        text: "22:00"
+                        width: 40
+                        align: TOP_LEFT
+                        translate_x: 116
+                        translate_y: 99
+                    - button:
+                        styles: tile
+                        align: TOP_LEFT
+                        translate_x: 158
+                        translate_y: 94
+                        width: 26
+                        height: 26
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text: "\U000F0415"
+                        on_click:
+                          - lambda: |-
+                              int v = atoi(id(g_sleep_start).c_str());
+                              v = (v + 1) % 24;
+                              char b[4];
+                              snprintf(b, sizeof(b), "%d", v);
+                              id(g_sleep_start) = b;
+                          - script.execute: update_clock_ui
+                    - label:
+                        text: "Sleep end"
+                        text_font: my_font12
+                        text_color: 0x4A1F45
+                        align: TOP_LEFT
+                        translate_x: 16
+                        translate_y: 142
+                    - button:
+                        styles: tile
+                        align: TOP_LEFT
+                        translate_x: 84
+                        translate_y: 136
+                        width: 26
+                        height: 26
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text: "\U000F0374"
+                        on_click:
+                          - lambda: |-
+                              int v = atoi(id(g_sleep_end).c_str());
+                              v = (v + 23) % 24;
+                              char b[4];
+                              snprintf(b, sizeof(b), "%d", v);
+                              id(g_sleep_end) = b;
+                          - script.execute: update_clock_ui
+                    - label:
+                        id: ck_end_lbl
+                        text_font: my_font14
+                        text_color: 0x4A1F45
+                        text: "7:00"
+                        width: 40
+                        align: TOP_LEFT
+                        translate_x: 116
+                        translate_y: 141
+                    - button:
+                        styles: tile
+                        align: TOP_LEFT
+                        translate_x: 158
+                        translate_y: 136
+                        width: 26
+                        height: 26
+                        widgets:
+                          - label:
+                              text_font: icon_font_14
+                              text: "\U000F0415"
+                        on_click:
+                          - lambda: |-
+                              int v = atoi(id(g_sleep_end).c_str());
+                              v = (v + 1) % 24;
+                              char b[4];
+                              snprintf(b, sizeof(b), "%d", v);
+                              id(g_sleep_end) = b;
+                          - script.execute: update_clock_ui
+                    - label:
+                        text: "Screen stays dark during sleep hours. Set both to the same hour to disable."
+                        text_font: my_font8
+                        text_color: 0x7A6B84
+                        width: 172
+                        align: TOP_LEFT
+                        translate_x: 16
+                        translate_y: 174
