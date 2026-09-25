@@ -201,6 +201,8 @@ globals:
     initial_value: '""'
   - id: g_fav
     type: std::string
+  - id: g_fav_on
+    type: std::string
   - id: g_st
     type: std::string
   - id: g_ti
@@ -977,6 +979,7 @@ script:
                 bool wx = as_bool(resp["wx"], true);
                 bool ot = as_bool(resp["ot"], true);
                 bool cl = as_bool(resp["cl"], true);
+                id(g_fav_on) = as_bool(resp["fav_on"], false) ? "1" : "0";
                 lv_obj_t *wxobjs[3] = {id(display_weather_icon), id(display_weather_text), id(wx_tap)};
                 for (int i = 0; i < 3; i++) {
                   if (wx) lv_obj_clear_flag(wxobjs[i], LV_OBJ_FLAG_HIDDEN);
@@ -1052,6 +1055,11 @@ script:
             std::string s = id(g_st);
             if (s == "playing") return {"\U000F03E4"};
             return {"\U000F040A"};
+      - lvgl.label.update:
+          id: mfav_icon
+          text: !lambda |-
+            if (id(g_fav_on) == "1") return {"\U000F02D1"};
+            return {"\U000F02D5"};
       - lvgl.widget.update:
           id: np_icon
           text_color: !lambda |-
@@ -1512,6 +1520,7 @@ font:
       - "\U000F0502"
       - "\U000F040C"
       - "\U000F02D1"
+      - "\U000F02D5"
       - "\U000F004D"
 
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/refs/heads/master/fonts/materialdesignicons-webfont.ttf"
@@ -2321,10 +2330,10 @@ lvgl:
                         id: mback
                         styles: glass_btn
                         align: TOP_LEFT
-                        translate_x: 12
+                        translate_x: 10
                         translate_y: 6
-                        width: 28
-                        height: 28
+                        width: 24
+                        height: 24
                         widgets:
                           - label:
                               text_font: icon_font_14
@@ -2338,8 +2347,8 @@ lvgl:
                         text_color: 0xE3B8D6
                         text: "NOW PLAYING"
                         align: TOP_LEFT
-                        translate_x: 50
-                        translate_y: 8
+                        translate_x: 42
+                        translate_y: 12
                     - label:
                         id: np2_state
                         text_font: my_font10
@@ -2347,11 +2356,11 @@ lvgl:
                         text: " "
                         align: TOP_RIGHT
                         translate_x: -14
-                        translate_y: 8
+                        translate_y: 12
                     - obj:
                         align: TOP_LEFT
                         translate_x: 12
-                        translate_y: 26
+                        translate_y: 36
                         width: 276
                         height: 1
                         bg_color: 0xFFFFFF
@@ -2362,11 +2371,11 @@ lvgl:
                         pad_all: 0
                     - obj:
                         align: TOP_LEFT
-                        translate_x: 14
-                        translate_y: 30
-                        width: 40
-                        height: 40
-                        radius: 10
+                        translate_x: 12
+                        translate_y: 42
+                        width: 34
+                        height: 34
+                        radius: 8
                         bg_color: 0xAE6FA0
                         bg_grad_color: 0x8A4F7E
                         bg_grad_dir: VER
@@ -2387,9 +2396,9 @@ lvgl:
                         text_color: 0xFFFFFF
                         text: " "
                         align: TOP_LEFT
-                        translate_x: 62
-                        translate_y: 31
-                        width: 228
+                        translate_x: 56
+                        translate_y: 43
+                        width: 234
                         long_mode: SCROLL_CIRCULAR
                     - label:
                         id: np2_artist
@@ -2397,16 +2406,16 @@ lvgl:
                         text_color: 0xD6BED0
                         text: " "
                         align: TOP_LEFT
-                        translate_x: 62
-                        translate_y: 48
-                        width: 228
+                        translate_x: 56
+                        translate_y: 60
+                        width: 234
                         long_mode: DOT
                     - button:
                         id: mprev
                         styles: glass_btn
                         align: TOP_LEFT
-                        translate_x: 50
-                        translate_y: 74
+                        translate_x: 48
+                        translate_y: 76
                         width: 34
                         height: 34
                         widgets:
@@ -2425,9 +2434,9 @@ lvgl:
                         styles: play_btn
                         align: TOP_LEFT
                         translate_x: 90
-                        translate_y: 70
-                        width: 40
-                        height: 40
+                        translate_y: 75
+                        width: 36
+                        height: 36
                         widgets:
                           - label:
                               id: mpp_icon
@@ -2444,8 +2453,8 @@ lvgl:
                         id: mnext
                         styles: glass_btn
                         align: TOP_LEFT
-                        translate_x: 136
-                        translate_y: 74
+                        translate_x: 134
+                        translate_y: 76
                         width: 34
                         height: 34
                         widgets:
@@ -2465,14 +2474,15 @@ lvgl:
                         hidden: true
                         align: TOP_LEFT
                         translate_x: 176
-                        translate_y: 74
+                        translate_y: 76
                         width: 34
                         height: 34
                         widgets:
                           - label:
+                              id: mfav_icon
                               text_font: icon_font_20
                               text_color: 0xD92BBC
-                              text: "\U000F02D1"
+                              text: "\U000F02D5"
                         on_click:
                           - if:
                               condition:
@@ -2482,12 +2492,15 @@ lvgl:
                                     action: button.press
                                     data:
                                       entity_id: !lambda return id(g_fav);
+                                - lambda: |-
+                                    id(g_fav_on) = (id(g_fav_on) == "1") ? "0" : "1";
+                                - script.execute: update_media
                     - button:
                         id: mpwr
                         styles: power_btn
                         align: TOP_LEFT
-                        translate_x: 216
-                        translate_y: 74
+                        translate_x: 218
+                        translate_y: 76
                         width: 34
                         height: 34
                         widgets:
@@ -2528,7 +2541,18 @@ lvgl:
                         shadow_width: 0
                         pad_all: 0
                         scroll_dir: VER
-                        scrollbar_mode: AUTO
+                        scrollbar_mode: "ON"
+                        scroll_chain_ver: true
+                        scroll_momentum: true
+                        scroll_elastic: true
+                        scrollbar:
+                          bg_color: 0xFFFFFF
+                          bg_opa: 60%
+                          width: 5
+                          radius: 3
+                          pad_right: 2
+                          pad_top: 2
+                          pad_bottom: 2
                         widgets:
                           - button:
                               id: dev1_btn
@@ -2537,7 +2561,7 @@ lvgl:
                               align: TOP_LEFT
                               translate_x: 0
                               translate_y: 0
-                              width: 138
+                              width: 130
                               height: 15
                               widgets:
                                 - label:
@@ -2554,7 +2578,7 @@ lvgl:
                                     text: "--"
                                     align: LEFT_MID
                                     translate_x: 20
-                                    width: 110
+                                    width: 102
                                     long_mode: DOT
                               on_click:
                                 - lambda: |-
@@ -2566,9 +2590,9 @@ lvgl:
                               styles: tile
                               checkable: true
                               align: TOP_LEFT
-                              translate_x: 146
+                              translate_x: 142
                               translate_y: 0
-                              width: 138
+                              width: 130
                               height: 15
                               widgets:
                                 - label:
@@ -2585,7 +2609,7 @@ lvgl:
                                     text: "--"
                                     align: LEFT_MID
                                     translate_x: 20
-                                    width: 110
+                                    width: 102
                                     long_mode: DOT
                               on_click:
                                 - lambda: |-
@@ -2599,7 +2623,7 @@ lvgl:
                               align: TOP_LEFT
                               translate_x: 0
                               translate_y: 17
-                              width: 138
+                              width: 130
                               height: 15
                               widgets:
                                 - label:
@@ -2616,7 +2640,7 @@ lvgl:
                                     text: "--"
                                     align: LEFT_MID
                                     translate_x: 20
-                                    width: 110
+                                    width: 102
                                     long_mode: DOT
                               on_click:
                                 - lambda: |-
@@ -2628,9 +2652,9 @@ lvgl:
                               styles: tile
                               checkable: true
                               align: TOP_LEFT
-                              translate_x: 146
+                              translate_x: 142
                               translate_y: 17
-                              width: 138
+                              width: 130
                               height: 15
                               widgets:
                                 - label:
@@ -2647,7 +2671,7 @@ lvgl:
                                     text: "--"
                                     align: LEFT_MID
                                     translate_x: 20
-                                    width: 110
+                                    width: 102
                                     long_mode: DOT
                               on_click:
                                 - lambda: |-
@@ -2662,7 +2686,7 @@ lvgl:
                               align: TOP_LEFT
                               translate_x: 0
                               translate_y: 34
-                              width: 138
+                              width: 130
                               height: 15
                               widgets:
                                 - label:
@@ -2679,7 +2703,7 @@ lvgl:
                                     text: "--"
                                     align: LEFT_MID
                                     translate_x: 20
-                                    width: 110
+                                    width: 102
                                     long_mode: DOT
                               on_click:
                                 - lambda: |-
@@ -2692,9 +2716,9 @@ lvgl:
                               checkable: true
                               hidden: true
                               align: TOP_LEFT
-                              translate_x: 146
+                              translate_x: 142
                               translate_y: 34
-                              width: 138
+                              width: 130
                               height: 15
                               widgets:
                                 - label:
@@ -2711,7 +2735,7 @@ lvgl:
                                     text: "--"
                                     align: LEFT_MID
                                     translate_x: 20
-                                    width: 110
+                                    width: 102
                                     long_mode: DOT
                               on_click:
                                 - lambda: |-
@@ -2726,7 +2750,7 @@ lvgl:
                               align: TOP_LEFT
                               translate_x: 0
                               translate_y: 51
-                              width: 138
+                              width: 130
                               height: 15
                               widgets:
                                 - label:
@@ -2743,7 +2767,7 @@ lvgl:
                                     text: "--"
                                     align: LEFT_MID
                                     translate_x: 20
-                                    width: 110
+                                    width: 102
                                     long_mode: DOT
                               on_click:
                                 - lambda: |-
@@ -2756,9 +2780,9 @@ lvgl:
                               checkable: true
                               hidden: true
                               align: TOP_LEFT
-                              translate_x: 146
+                              translate_x: 142
                               translate_y: 51
-                              width: 138
+                              width: 130
                               height: 15
                               widgets:
                                 - label:
@@ -2775,7 +2799,7 @@ lvgl:
                                     text: "--"
                                     align: LEFT_MID
                                     translate_x: 20
-                                    width: 110
+                                    width: 102
                                     long_mode: DOT
                               on_click:
                                 - lambda: |-
@@ -2810,14 +2834,25 @@ lvgl:
                         shadow_width: 0
                         pad_all: 0
                         scroll_dir: VER
-                        scrollbar_mode: AUTO
+                        scrollbar_mode: "ON"
+                        scroll_chain_ver: true
+                        scroll_momentum: true
+                        scroll_elastic: true
+                        scrollbar:
+                          bg_color: 0xFFFFFF
+                          bg_opa: 60%
+                          width: 5
+                          radius: 3
+                          pad_right: 2
+                          pad_top: 2
+                          pad_bottom: 2
                         widgets:
                           - button:
                               id: pl1_btn
                               styles: list_row
                               align: TOP_LEFT
                               translate_y: 0
-                              width: 284
+                              width: 272
                               height: 15
                               widgets:
                                 - label:
@@ -2832,7 +2867,7 @@ lvgl:
                                     text: " "
                                     align: LEFT_MID
                                     translate_x: 24
-                                    width: 252
+                                    width: 240
                                     long_mode: DOT
                               on_click:
                                 - if:
@@ -2850,7 +2885,7 @@ lvgl:
                               styles: list_row
                               align: TOP_LEFT
                               translate_y: 17
-                              width: 284
+                              width: 272
                               height: 15
                               widgets:
                                 - label:
@@ -2865,7 +2900,7 @@ lvgl:
                                     text: " "
                                     align: LEFT_MID
                                     translate_x: 24
-                                    width: 252
+                                    width: 240
                                     long_mode: DOT
                               on_click:
                                 - if:
@@ -2883,7 +2918,7 @@ lvgl:
                               styles: list_row
                               align: TOP_LEFT
                               translate_y: 34
-                              width: 284
+                              width: 272
                               height: 15
                               widgets:
                                 - label:
@@ -2898,7 +2933,7 @@ lvgl:
                                     text: " "
                                     align: LEFT_MID
                                     translate_x: 24
-                                    width: 252
+                                    width: 240
                                     long_mode: DOT
                               on_click:
                                 - if:
@@ -2917,7 +2952,7 @@ lvgl:
                               hidden: true
                               align: TOP_LEFT
                               translate_y: 51
-                              width: 284
+                              width: 272
                               height: 15
                               widgets:
                                 - label:
@@ -2932,7 +2967,7 @@ lvgl:
                                     text: " "
                                     align: LEFT_MID
                                     translate_x: 24
-                                    width: 252
+                                    width: 240
                                     long_mode: DOT
                               on_click:
                                 - if:
@@ -2951,7 +2986,7 @@ lvgl:
                               hidden: true
                               align: TOP_LEFT
                               translate_y: 68
-                              width: 284
+                              width: 272
                               height: 15
                               widgets:
                                 - label:
@@ -2966,7 +3001,7 @@ lvgl:
                                     text: " "
                                     align: LEFT_MID
                                     translate_x: 24
-                                    width: 252
+                                    width: 240
                                     long_mode: DOT
                               on_click:
                                 - if:
@@ -2985,7 +3020,7 @@ lvgl:
                               hidden: true
                               align: TOP_LEFT
                               translate_y: 85
-                              width: 284
+                              width: 272
                               height: 15
                               widgets:
                                 - label:
@@ -3000,7 +3035,7 @@ lvgl:
                                     text: " "
                                     align: LEFT_MID
                                     translate_x: 24
-                                    width: 252
+                                    width: 240
                                     long_mode: DOT
                               on_click:
                                 - if:
